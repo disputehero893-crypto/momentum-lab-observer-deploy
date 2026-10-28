@@ -1,0 +1,3061 @@
+{
+  "schema_version": "1.0",
+  "run_id": "demo-v1",
+  "run_key": "demo-v1",
+  "mode": "demo",
+  "provenance": "synthetic",
+  "status": "completed",
+  "strategy_version": "experimental_v1",
+  "fixture_version": "synthetic-replay-v1",
+  "configuration_hash": "786c59154d6f1fdaf3227bf2abf2a56f5e9a2c3af38e7be78119ecc0fe64796d",
+  "strategy_config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+  "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86",
+  "generated_at": "2026-10-18T16:04:34.797Z",
+  "started_at": "2026-10-16T13:34:52Z",
+  "completed_at": "2026-10-16T13:43:05Z",
+  "broker": {
+    "name": "Alpaca paper",
+    "connected": false,
+    "reconciled": false,
+    "orders_submitted": 0,
+    "live_execution_supported": false
+  },
+  "settings": {
+    "strategy": {
+      "profile": "experimental_v1",
+      "mode": "paper",
+      "min_price": "2",
+      "max_price": "20",
+      "min_gain_pct": "10",
+      "min_rvol": "5",
+      "max_float_exclusive": 20000000,
+      "rvol_sessions": 30,
+      "impulse_bars": 3,
+      "min_pullback_bars": 2,
+      "max_pullback_bars": 3,
+      "min_impulse_gain_pct": "2",
+      "min_impulse_mean_volume": 10000,
+      "min_impulse_body_fraction": "0.5",
+      "max_pullback_volume_ratio": "0.6",
+      "max_retracement": "0.5",
+      "tick_size": "0.01",
+      "max_entry_chase": "0.03",
+      "target_r": "2",
+      "max_quote_age_seconds": "2",
+      "max_spread": "0.05",
+      "max_spread_bps": "100",
+      "max_float_age_days": 7,
+      "max_catalyst_age_hours": 24,
+      "max_hold_seconds": 600,
+      "trade_start_et": "07:00",
+      "trade_end_et": "10:00"
+    },
+    "risk": {
+      "mode": "paper",
+      "per_trade_risk": "25",
+      "max_daily_loss": "75",
+      "max_notional": "1000",
+      "max_shares": 500,
+      "execution_allowance_per_share": "0.02",
+      "max_volume_participation": "0.01",
+      "max_quote_age_seconds": "2",
+      "max_intent_age_seconds": "2",
+      "max_account_age_seconds": "5",
+      "max_spread": "0.05",
+      "max_spread_bps": "100",
+      "min_reward_r": "2"
+    },
+    "initial_simulated_equity": "10000",
+    "fixture_version": "synthetic-replay-v1"
+  },
+  "account": {
+    "mode": "demo",
+    "equity": "10004.848",
+    "buying_power": "10004.848",
+    "realized_pnl": "6.06",
+    "unrealized_pnl": "0.00",
+    "fees": "1.212",
+    "position_qty": 0,
+    "open_order_qty": 0,
+    "session_date": "2026-10-16",
+    "as_of": "2026-10-16T13:43:05Z",
+    "provenance": "synthetic",
+    "initial_equity": "10000"
+  },
+  "positions": [],
+  "open_orders": [],
+  "trades": [
+    {
+      "symbol": "DEMO-A",
+      "qty": 101,
+      "entry_price": "9.82",
+      "exit_price": "10.00",
+      "opened_at": "2026-10-16T13:35:06Z",
+      "closed_at": "2026-10-16T13:35:20Z",
+      "stop_price": "9.73",
+      "target_price": "10.00",
+      "setup_id": "ce11c36f1669847160f69c37",
+      "gross_pnl": "18.18",
+      "fees": "0.606",
+      "net_pnl": "17.574",
+      "exit_reason": "target_reached",
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    },
+    {
+      "symbol": "DEMO-B",
+      "qty": 101,
+      "entry_price": "9.82",
+      "exit_price": "9.70",
+      "opened_at": "2026-10-16T13:36:06Z",
+      "closed_at": "2026-10-16T13:36:21Z",
+      "stop_price": "9.73",
+      "target_price": "10.00",
+      "setup_id": "3f4dab4d9b94c4e2b996847f",
+      "gross_pnl": "-12.12",
+      "fees": "0.606",
+      "net_pnl": "-12.726",
+      "exit_reason": "stop_reached",
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    }
+  ],
+  "fills": [
+    {
+      "symbol": "DEMO-A",
+      "side": "buy",
+      "qty": 40,
+      "price": "9.82",
+      "fee": "0.120",
+      "at": "2026-10-16T13:35:06Z",
+      "remaining_qty": 61,
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    },
+    {
+      "symbol": "DEMO-A",
+      "side": "buy",
+      "qty": 61,
+      "price": "9.82",
+      "fee": "0.183",
+      "at": "2026-10-16T13:35:07Z",
+      "remaining_qty": 0,
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    },
+    {
+      "symbol": "DEMO-A",
+      "side": "sell",
+      "qty": 101,
+      "price": "10.00",
+      "fee": "0.303",
+      "at": "2026-10-16T13:35:20Z",
+      "remaining_qty": 0,
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    },
+    {
+      "symbol": "DEMO-B",
+      "side": "buy",
+      "qty": 101,
+      "price": "9.82",
+      "fee": "0.303",
+      "at": "2026-10-16T13:36:06Z",
+      "remaining_qty": 0,
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    },
+    {
+      "symbol": "DEMO-B",
+      "side": "sell",
+      "qty": 101,
+      "price": "9.70",
+      "fee": "0.303",
+      "at": "2026-10-16T13:36:21Z",
+      "remaining_qty": 0,
+      "provenance": "synthetic",
+      "broker_confirmed": false
+    }
+  ],
+  "decisions": [
+    {
+      "index": 1,
+      "at": "2026-10-16T13:34:52Z",
+      "symbol": "DEMO-C",
+      "scenario": "stale entry quote",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "stale_quote"
+        ],
+        "intent": null,
+        "metrics": {
+          "field": "",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "stale_quote"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "0.00",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "field": "",
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 2,
+      "at": "2026-10-16T13:35:05Z",
+      "symbol": "DEMO-A",
+      "scenario": "valid entry intention",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-A",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "ce11c36f1669847160f69c37",
+          "observed_at": "2026-10-16T13:35:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": true,
+        "reasons": [
+          "paper_risk_approved"
+        ],
+        "intent": {
+          "symbol": "DEMO-A",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "ce11c36f1669847160f69c37",
+          "observed_at": "2026-10-16T13:35:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout",
+          "qty": 101,
+          "notional": "991.82",
+          "planned_risk": "11.11",
+          "risk_per_share": "0.11",
+          "risk_checked_at": "2026-10-16T13:35:05+00:00",
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86",
+          "live_enabled": false,
+          "paper_only": true
+        },
+        "metrics": {
+          "net_pnl": "0.00",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "quantity_caps": {
+            "risk": 227,
+            "buying_power": 1018,
+            "notional": 101,
+            "liquidity": 300,
+            "configured_shares": 500
+          },
+          "risk_budget": "25",
+          "remaining_daily_risk": "75.00",
+          "risk_per_share": "0.11",
+          "locked": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 101
+    },
+    {
+      "index": 3,
+      "at": "2026-10-16T13:35:06Z",
+      "symbol": "DEMO-A",
+      "scenario": "partial entry fill",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-A",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "ce11c36f1669847160f69c37",
+          "observed_at": "2026-10-16T13:35:06+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "existing_exposure"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "-0.520",
+          "daily_loss_limit": "75",
+          "position_qty": 40,
+          "open_order_qty": 61,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": {
+        "accepted": false,
+        "reasons": [
+          "hold"
+        ],
+        "intent": null,
+        "metrics": {
+          "mark_bid": "9.81",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "position_qty_after": 40,
+      "pending_qty_after": 61
+    },
+    {
+      "index": 4,
+      "at": "2026-10-16T13:35:07Z",
+      "symbol": "DEMO-A",
+      "scenario": "remaining entry fill",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-A",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "ce11c36f1669847160f69c37",
+          "observed_at": "2026-10-16T13:35:07+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "existing_exposure"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "-1.313",
+          "daily_loss_limit": "75",
+          "position_qty": 101,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": {
+        "accepted": false,
+        "reasons": [
+          "hold"
+        ],
+        "intent": null,
+        "metrics": {
+          "mark_bid": "9.81",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "position_qty_after": 101,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 5,
+      "at": "2026-10-16T13:35:20Z",
+      "symbol": "DEMO-A",
+      "scenario": "target exit",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "entry_extended_or_inconsistent"
+        ],
+        "intent": null,
+        "metrics": {
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "existing_exposure"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "17.877",
+          "daily_loss_limit": "75",
+          "position_qty": 101,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": {
+        "accepted": true,
+        "reasons": [
+          "target_reached"
+        ],
+        "intent": {
+          "symbol": "DEMO-A",
+          "side": "sell",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "qty": 101,
+          "entry_limit": "10.00",
+          "limit_price": "10.00",
+          "observed_at": "2026-10-16T13:35:20+00:00",
+          "reason": "target_reached",
+          "feed": "synthetic"
+        },
+        "metrics": {
+          "position_flat": false,
+          "fill_confirmation_required": true,
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 6,
+      "at": "2026-10-16T13:36:05Z",
+      "symbol": "DEMO-B",
+      "scenario": "second valid entry",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-B",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "3f4dab4d9b94c4e2b996847f",
+          "observed_at": "2026-10-16T13:36:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": true,
+        "reasons": [
+          "paper_risk_approved"
+        ],
+        "intent": {
+          "symbol": "DEMO-B",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "3f4dab4d9b94c4e2b996847f",
+          "observed_at": "2026-10-16T13:36:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout",
+          "qty": 101,
+          "notional": "991.82",
+          "planned_risk": "11.11",
+          "risk_per_share": "0.11",
+          "risk_checked_at": "2026-10-16T13:36:05+00:00",
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86",
+          "live_enabled": false,
+          "paper_only": true
+        },
+        "metrics": {
+          "net_pnl": "17.574",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "quantity_caps": {
+            "risk": 227,
+            "buying_power": 1020,
+            "notional": 101,
+            "liquidity": 300,
+            "configured_shares": 500
+          },
+          "risk_budget": "25",
+          "remaining_daily_risk": "92.574",
+          "risk_per_share": "0.11",
+          "locked": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 101
+    },
+    {
+      "index": 7,
+      "at": "2026-10-16T13:36:06Z",
+      "symbol": "DEMO-B",
+      "scenario": "second entry fill",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-B",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "3f4dab4d9b94c4e2b996847f",
+          "observed_at": "2026-10-16T13:36:06+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "existing_exposure"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "16.261",
+          "daily_loss_limit": "75",
+          "position_qty": 101,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": {
+        "accepted": false,
+        "reasons": [
+          "hold"
+        ],
+        "intent": null,
+        "metrics": {
+          "mark_bid": "9.81",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "position_qty_after": 101,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 8,
+      "at": "2026-10-16T13:36:20Z",
+      "symbol": "DEMO-B",
+      "scenario": "stale quote blocks stop exit",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "stale_quote"
+        ],
+        "intent": null,
+        "metrics": {
+          "field": "",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "existing_exposure"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.141",
+          "daily_loss_limit": "75",
+          "position_qty": 101,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": {
+        "accepted": false,
+        "reasons": [
+          "stale_quote"
+        ],
+        "intent": null,
+        "metrics": {
+          "field": "",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "position_qty_after": 101,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 9,
+      "at": "2026-10-16T13:36:21Z",
+      "symbol": "DEMO-B",
+      "scenario": "fresh quote confirms stop exit",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "waiting_for_breakout"
+        ],
+        "intent": null,
+        "metrics": {
+          "trigger": "9.81",
+          "last": "9.70",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "existing_exposure"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "5.151",
+          "daily_loss_limit": "75",
+          "position_qty": 101,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": {
+        "accepted": true,
+        "reasons": [
+          "stop_reached"
+        ],
+        "intent": {
+          "symbol": "DEMO-B",
+          "side": "sell",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "qty": 101,
+          "entry_limit": "9.70",
+          "limit_price": "9.70",
+          "observed_at": "2026-10-16T13:36:21+00:00",
+          "reason": "stop_reached",
+          "feed": "synthetic"
+        },
+        "metrics": {
+          "position_flat": false,
+          "fill_confirmation_required": true,
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 10,
+      "at": "2026-10-16T13:37:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "insufficient relative volume",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "rvol_below_threshold"
+        ],
+        "intent": null,
+        "metrics": {
+          "rvol": "2",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "no_entry_intent"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 11,
+      "at": "2026-10-16T13:38:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "unknown float",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "float_unconfirmed"
+        ],
+        "intent": null,
+        "metrics": {
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "no_entry_intent"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 12,
+      "at": "2026-10-16T13:39:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "wide spread",
+      "strategy": {
+        "accepted": false,
+        "reasons": [
+          "spread_too_wide"
+        ],
+        "intent": null,
+        "metrics": {
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "spread_too_wide"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 13,
+      "at": "2026-10-16T13:40:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "reconciliation missing",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-C",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "103e61c990d776bbe0fb2587",
+          "observed_at": "2026-10-16T13:40:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "reconciliation_required"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 14,
+      "at": "2026-10-16T13:41:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "halt new entries",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-C",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "ede3df622ed4e4e67e6128da",
+          "observed_at": "2026-10-16T13:41:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "new_entries_halted"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 15,
+      "at": "2026-10-16T13:42:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "emergency kill latch",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-C",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "d16b16e805dfcc3e3142ff1e",
+          "observed_at": "2026-10-16T13:42:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "kill_switch_latched"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "locked": true,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "index": 16,
+      "at": "2026-10-16T13:43:05Z",
+      "symbol": "DEMO-C",
+      "scenario": "restart preserves emergency lock",
+      "strategy": {
+        "accepted": true,
+        "reasons": [
+          "first_pullback_breakout"
+        ],
+        "intent": {
+          "symbol": "DEMO-C",
+          "side": "buy",
+          "mode": "paper",
+          "profile": "experimental_v1",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229",
+          "entry_limit": "9.82",
+          "limit_price": "9.82",
+          "stop_price": "9.73",
+          "target_price": "10.00",
+          "setup_id": "26713caa9f3f5093678f4493",
+          "observed_at": "2026-10-16T13:43:05+00:00",
+          "feed": "synthetic",
+          "liquidity_volume": 30000,
+          "reason": "first_pullback_breakout"
+        },
+        "metrics": {
+          "gain_pct": "22.7500",
+          "rvol": "7",
+          "retracement": "0.3172413793103448275862068966",
+          "trigger": "9.81",
+          "known_resistance": "10.20",
+          "impulse_mean_volume": "123333.3333333333333333333333",
+          "pullback_mean_volume": "32500",
+          "pullback_bars": 2,
+          "reduced_fidelity": "price_and_volume_only_no_depth",
+          "config_id": "9c573dbfe6af98716621b4d497866b5ada4043810829c602c7b3eba23dc37229"
+        },
+        "profile": "experimental_v1"
+      },
+      "risk": {
+        "accepted": false,
+        "reasons": [
+          "kill_switch_latched"
+        ],
+        "intent": null,
+        "metrics": {
+          "net_pnl": "4.848",
+          "daily_loss_limit": "75",
+          "position_qty": 0,
+          "open_order_qty": 0,
+          "flatten_required": false,
+          "cancel_entries_required": false,
+          "locked": true,
+          "risk_config_id": "c0251c909f547822acabb310f5beaaf6975aa7f78814a2011b9eddbbcf4b7a86"
+        },
+        "profile": "experimental_v1"
+      },
+      "exit": null,
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    }
+  ],
+  "display_data": [
+    {
+      "scenario": "stale entry quote",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:34:52Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:34:42Z",
+        "received_at": "2026-10-16T13:34:42Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:34:52Z",
+        "received_at": "2026-10-16T13:34:52Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:29:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:30:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:30:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:31:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:34:52Z",
+        "float_known_at": "2026-10-15T13:34:52Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:34:52Z",
+        "catalyst_known_at": "2026-10-16T12:35:52Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:34:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "valid entry intention",
+      "symbol": "DEMO-A",
+      "at": "2026-10-16T13:35:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-A",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:05Z",
+        "received_at": "2026-10-16T13:35:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-A",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:05Z",
+        "received_at": "2026-10-16T13:35:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:30:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:31:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:35:05Z",
+        "float_known_at": "2026-10-15T13:35:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:35:05Z",
+        "catalyst_known_at": "2026-10-16T12:36:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:35:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "partial entry fill",
+      "symbol": "DEMO-A",
+      "at": "2026-10-16T13:35:06Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-A",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:06Z",
+        "received_at": "2026-10-16T13:35:06Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-A",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:06Z",
+        "received_at": "2026-10-16T13:35:06Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:30:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:31:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:35:06Z",
+        "float_known_at": "2026-10-15T13:35:06Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:35:06Z",
+        "catalyst_known_at": "2026-10-16T12:36:06Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:35:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "remaining entry fill",
+      "symbol": "DEMO-A",
+      "at": "2026-10-16T13:35:07Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-A",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:07Z",
+        "received_at": "2026-10-16T13:35:07Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-A",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:07Z",
+        "received_at": "2026-10-16T13:35:07Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:30:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:31:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:35:07Z",
+        "float_known_at": "2026-10-15T13:35:07Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:35:07Z",
+        "catalyst_known_at": "2026-10-16T12:36:07Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:35:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "target exit",
+      "symbol": "DEMO-A",
+      "at": "2026-10-16T13:35:20Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-A",
+        "bid": "10.00",
+        "ask": "10.01",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:20Z",
+        "received_at": "2026-10-16T13:35:20Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-A",
+        "price": "10.00",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:35:20Z",
+        "received_at": "2026-10-16T13:35:20Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:30:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:31:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:35:20Z",
+        "float_known_at": "2026-10-15T13:35:20Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:35:20Z",
+        "catalyst_known_at": "2026-10-16T12:36:20Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:35:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "second valid entry",
+      "symbol": "DEMO-B",
+      "at": "2026-10-16T13:36:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-B",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:05Z",
+        "received_at": "2026-10-16T13:36:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-B",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:05Z",
+        "received_at": "2026-10-16T13:36:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:36:05Z",
+        "float_known_at": "2026-10-15T13:36:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:36:05Z",
+        "catalyst_known_at": "2026-10-16T12:37:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:36:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "second entry fill",
+      "symbol": "DEMO-B",
+      "at": "2026-10-16T13:36:06Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-B",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:06Z",
+        "received_at": "2026-10-16T13:36:06Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-B",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:06Z",
+        "received_at": "2026-10-16T13:36:06Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:36:06Z",
+        "float_known_at": "2026-10-15T13:36:06Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:36:06Z",
+        "catalyst_known_at": "2026-10-16T12:37:06Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:36:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "stale quote blocks stop exit",
+      "symbol": "DEMO-B",
+      "at": "2026-10-16T13:36:20Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-B",
+        "bid": "9.69",
+        "ask": "9.71",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:10Z",
+        "received_at": "2026-10-16T13:36:10Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-B",
+        "price": "9.69",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:20Z",
+        "received_at": "2026-10-16T13:36:20Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:36:20Z",
+        "float_known_at": "2026-10-15T13:36:20Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:36:20Z",
+        "catalyst_known_at": "2026-10-16T12:37:20Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:36:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "fresh quote confirms stop exit",
+      "symbol": "DEMO-B",
+      "at": "2026-10-16T13:36:21Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-B",
+        "bid": "9.70",
+        "ask": "9.72",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:21Z",
+        "received_at": "2026-10-16T13:36:21Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-B",
+        "price": "9.70",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:36:21Z",
+        "received_at": "2026-10-16T13:36:21Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:31:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:32:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:36:21Z",
+        "float_known_at": "2026-10-15T13:36:21Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:36:21Z",
+        "catalyst_known_at": "2026-10-16T12:37:21Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:36:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "insufficient relative volume",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:37:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:37:05Z",
+        "received_at": "2026-10-16T13:37:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:37:05Z",
+        "received_at": "2026-10-16T13:37:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:32:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:33:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:36:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:37:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:37:05Z",
+        "float_known_at": "2026-10-15T13:37:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:37:05Z",
+        "catalyst_known_at": "2026-10-16T12:38:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:37:00Z",
+        "current_volume": 400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "unknown float",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:38:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:38:05Z",
+        "received_at": "2026-10-16T13:38:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:38:05Z",
+        "received_at": "2026-10-16T13:38:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:33:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:34:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:36:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:37:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:37:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:38:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": null,
+        "float_effective_at": "2026-10-15T13:38:05Z",
+        "float_known_at": "2026-10-15T13:38:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:38:05Z",
+        "catalyst_known_at": "2026-10-16T12:39:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:38:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "wide spread",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:39:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.71",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:39:05Z",
+        "received_at": "2026-10-16T13:39:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.71",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:39:05Z",
+        "received_at": "2026-10-16T13:39:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:34:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:35:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:36:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:37:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:37:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:38:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:38:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:39:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:39:05Z",
+        "float_known_at": "2026-10-15T13:39:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:39:05Z",
+        "catalyst_known_at": "2026-10-16T12:40:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:39:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "reconciliation missing",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:40:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:40:05Z",
+        "received_at": "2026-10-16T13:40:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:40:05Z",
+        "received_at": "2026-10-16T13:40:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:35:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:36:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:36:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:37:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:37:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:38:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:38:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:39:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:39:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:40:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:40:05Z",
+        "float_known_at": "2026-10-15T13:40:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:40:05Z",
+        "catalyst_known_at": "2026-10-16T12:41:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:40:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "halt new entries",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:41:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:41:05Z",
+        "received_at": "2026-10-16T13:41:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:41:05Z",
+        "received_at": "2026-10-16T13:41:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:36:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:37:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:37:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:38:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:38:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:39:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:39:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:40:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:40:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:41:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:41:05Z",
+        "float_known_at": "2026-10-15T13:41:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:41:05Z",
+        "catalyst_known_at": "2026-10-16T12:42:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:41:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "emergency kill latch",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:42:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:42:05Z",
+        "received_at": "2026-10-16T13:42:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:42:05Z",
+        "received_at": "2026-10-16T13:42:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:37:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:38:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:38:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:39:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:39:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:40:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:40:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:41:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:41:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:42:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:42:05Z",
+        "float_known_at": "2026-10-15T13:42:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:42:05Z",
+        "catalyst_known_at": "2026-10-16T12:43:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:42:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    },
+    {
+      "scenario": "restart preserves emergency lock",
+      "symbol": "DEMO-C",
+      "at": "2026-10-16T13:43:05Z",
+      "feed": "synthetic",
+      "provenance": "synthetic",
+      "session": {
+        "date": "2026-10-16",
+        "is_trading_day": true,
+        "source": "invented_demo_weekday_calendar"
+      },
+      "quote": {
+        "symbol": "DEMO-C",
+        "bid": "9.81",
+        "ask": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:43:05Z",
+        "received_at": "2026-10-16T13:43:05Z"
+      },
+      "last_trade": {
+        "symbol": "DEMO-C",
+        "price": "9.82",
+        "feed": "synthetic",
+        "timestamp": "2026-10-16T13:43:05Z",
+        "received_at": "2026-10-16T13:43:05Z"
+      },
+      "bars": [
+        {
+          "open": "8.80",
+          "high": "9.10",
+          "low": "8.75",
+          "close": "9.08",
+          "volume": 100000,
+          "start": "2026-10-16T13:38:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:39:00Z"
+        },
+        {
+          "open": "9.08",
+          "high": "9.50",
+          "low": "9.05",
+          "close": "9.48",
+          "volume": 120000,
+          "start": "2026-10-16T13:39:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:40:00Z"
+        },
+        {
+          "open": "9.48",
+          "high": "10.20",
+          "low": "9.46",
+          "close": "10.18",
+          "volume": 150000,
+          "start": "2026-10-16T13:40:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:41:00Z"
+        },
+        {
+          "open": "10.15",
+          "high": "10.16",
+          "low": "9.74",
+          "close": "9.79",
+          "volume": 35000,
+          "start": "2026-10-16T13:41:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:42:00Z"
+        },
+        {
+          "open": "9.79",
+          "high": "9.80",
+          "low": "9.74",
+          "close": "9.76",
+          "volume": 30000,
+          "start": "2026-10-16T13:42:00Z",
+          "feed": "synthetic",
+          "complete": true,
+          "available_at": "2026-10-16T13:43:00Z"
+        }
+      ],
+      "facts": {
+        "previous_close": "8.00",
+        "float_shares": 5000000,
+        "float_effective_at": "2026-10-15T13:43:05Z",
+        "float_known_at": "2026-10-15T13:43:05Z",
+        "catalyst_confirmed": true,
+        "catalyst_published_at": "2026-10-16T12:43:05Z",
+        "catalyst_known_at": "2026-10-16T12:44:05Z"
+      },
+      "rvol": {
+        "as_of": "2026-10-16T13:43:00Z",
+        "current_volume": 1400000,
+        "prior_same_clock_mean_volume": "200000",
+        "prior_session_count": 30
+      }
+    }
+  ],
+  "equity_curve": [
+    {
+      "at": "2026-10-16T13:34:52Z",
+      "simulated_equity": "10000.00",
+      "net_pnl": "0.00"
+    },
+    {
+      "at": "2026-10-16T13:35:05Z",
+      "simulated_equity": "10000.00",
+      "net_pnl": "0.00"
+    },
+    {
+      "at": "2026-10-16T13:35:06Z",
+      "simulated_equity": "9999.480",
+      "net_pnl": "-0.520"
+    },
+    {
+      "at": "2026-10-16T13:35:07Z",
+      "simulated_equity": "9998.687",
+      "net_pnl": "-1.313"
+    },
+    {
+      "at": "2026-10-16T13:35:20Z",
+      "simulated_equity": "10017.574",
+      "net_pnl": "17.574"
+    },
+    {
+      "at": "2026-10-16T13:36:05Z",
+      "simulated_equity": "10017.574",
+      "net_pnl": "17.574"
+    },
+    {
+      "at": "2026-10-16T13:36:06Z",
+      "simulated_equity": "10016.261",
+      "net_pnl": "16.261"
+    },
+    {
+      "at": "2026-10-16T13:36:20Z",
+      "simulated_equity": "10004.141",
+      "net_pnl": "4.141"
+    },
+    {
+      "at": "2026-10-16T13:36:21Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:37:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:38:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:39:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:40:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:41:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:42:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    },
+    {
+      "at": "2026-10-16T13:43:05Z",
+      "simulated_equity": "10004.848",
+      "net_pnl": "4.848"
+    }
+  ],
+  "scenario_checks": [
+    {
+      "scenario": "stale entry quote",
+      "strategy_reasons": [
+        "stale_quote"
+      ],
+      "risk_reasons": [
+        "stale_quote"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "valid entry intention",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "paper_risk_approved"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 101
+    },
+    {
+      "scenario": "partial entry fill",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "existing_exposure"
+      ],
+      "exit_reasons": [
+        "hold"
+      ],
+      "position_qty_after": 40,
+      "pending_qty_after": 61
+    },
+    {
+      "scenario": "remaining entry fill",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "existing_exposure"
+      ],
+      "exit_reasons": [
+        "hold"
+      ],
+      "position_qty_after": 101,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "target exit",
+      "strategy_reasons": [
+        "entry_extended_or_inconsistent"
+      ],
+      "risk_reasons": [
+        "existing_exposure"
+      ],
+      "exit_reasons": [
+        "target_reached"
+      ],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "second valid entry",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "paper_risk_approved"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 101
+    },
+    {
+      "scenario": "second entry fill",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "existing_exposure"
+      ],
+      "exit_reasons": [
+        "hold"
+      ],
+      "position_qty_after": 101,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "stale quote blocks stop exit",
+      "strategy_reasons": [
+        "stale_quote"
+      ],
+      "risk_reasons": [
+        "existing_exposure"
+      ],
+      "exit_reasons": [
+        "stale_quote"
+      ],
+      "position_qty_after": 101,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "fresh quote confirms stop exit",
+      "strategy_reasons": [
+        "waiting_for_breakout"
+      ],
+      "risk_reasons": [
+        "existing_exposure"
+      ],
+      "exit_reasons": [
+        "stop_reached"
+      ],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "insufficient relative volume",
+      "strategy_reasons": [
+        "rvol_below_threshold"
+      ],
+      "risk_reasons": [
+        "no_entry_intent"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "unknown float",
+      "strategy_reasons": [
+        "float_unconfirmed"
+      ],
+      "risk_reasons": [
+        "no_entry_intent"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "wide spread",
+      "strategy_reasons": [
+        "spread_too_wide"
+      ],
+      "risk_reasons": [
+        "spread_too_wide"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "reconciliation missing",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "reconciliation_required"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "halt new entries",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "new_entries_halted"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "emergency kill latch",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "kill_switch_latched"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    },
+    {
+      "scenario": "restart preserves emergency lock",
+      "strategy_reasons": [
+        "first_pullback_breakout"
+      ],
+      "risk_reasons": [
+        "kill_switch_latched"
+      ],
+      "exit_reasons": [],
+      "position_qty_after": 0,
+      "pending_qty_after": 0
+    }
+  ],
+  "risk_state": {
+    "version": 1,
+    "profile": "experimental_v1",
+    "daily_locks": {},
+    "kill_latched": true,
+    "last_session": "2026-10-16",
+    "last_observed_at": "2026-10-16T13:43:05+00:00",
+    "reconciliation_required": true
+  },
+  "metrics": {
+    "completed_trades": 2,
+    "simulated_fills": 5,
+    "gross_pnl": "6.06",
+    "fees": "1.212",
+    "net_pnl": "4.848",
+    "scenario_count": 16,
+    "event_count": 84,
+    "actual_broker_orders": 0
+  },
+  "assumptions": [
+    "Every symbol, quote, bar, float, catalyst and volume history is invented for this replay.",
+    "The weekday-only synthetic calendar is not an exchange holiday calendar.",
+    "Engine connection/reconciliation flags describe the in-process simulator; no broker was contacted.",
+    "Synthetic buy fills use the displayed ask; sells use the displayed bid; one entry fills in two parts.",
+    "The invented fee is $0.003 per share per side. Queue priority, latency, impact and real depth are absent.",
+    "The stop scenario includes a stale quote and a fill below the planned stop once a fresh quote arrives.",
+    "Default risk budgets are demonstration settings, not an approved paper or real-money allocation.",
+    "This replay validates software behavior. Its P&L is not backtest, paper-account or live performance."
+  ]
+}

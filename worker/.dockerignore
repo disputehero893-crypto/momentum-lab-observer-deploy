@@ -1,0 +1,10 @@
+.env
+.env.*
+data
+exports
+tests
+__pycache__
+*.sqlite3*
+*.worker.lock
+symbol_metadata.json
+

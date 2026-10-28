@@ -1,0 +1,2 @@
+# Python 3.12 standard library only. No third-party Python packages are required.
+

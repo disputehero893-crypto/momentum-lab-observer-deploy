@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "python": "3.12.14",
+  "unit_tests_passed": 171,
+  "engine_risk_tests": 40,
+  "worker_tests": 131,
+  "commands_verified": [
+    "python -m unittest discover -s tests -q",
+    "python -m momentum demo --run-id cli-verification",
+    "python -m momentum readiness",
+    "python -m momentum --help",
+    "python -m momentum observe --once (paper mode, missing credentials, safe exit 2, no network)"
+  ],
+  "provider_test_mode": "injected_fake_transport_only",
+  "actual_broker_requests": 0,
+  "actual_broker_orders": 0,
+  "http_validation": "real HTTP handler with in-memory requests; socket creation blocked by environment",
+  "container_build_verified": false,
+  "render_deployment_created": false,
+  "demo": {
+    "bytes": 88160,
+    "sha256": "c4b4bd8c070cece902ad46008109fe0e960ac1b27d7bdadf49911704face8f98",
+    "ndjson_sha256": "52007816c26c014777f7e31d03e8f5113e259ed284d0006ab3dd34fc722f0fe2",
+    "events": 84,
+    "unique_event_ids": 84,
+    "metrics": {
+      "completed_trades": 2,
+      "simulated_fills": 5,
+      "gross_pnl": "6.06",
+      "fees": "1.212",
+      "net_pnl": "4.848",
+      "scenario_count": 16,
+      "event_count": 84,
+      "actual_broker_orders": 0
+    }
+  },
+  "original_unit_tests_passed": 61,
+  "observation_validation": "../docs/observation-validation.json",
+  "current_test_modules": {
+    "test_risk": 21,
+    "test_strategy": 19,
+    "test_worker_activities": 32,
+    "test_worker_adapter": 5,
+    "test_worker_config": 3,
+    "test_worker_demo": 2,
+    "test_worker_journal": 3,
+    "test_worker_ledger": 39,
+    "test_worker_observation": 14,
+    "test_worker_publisher": 14,
+    "test_worker_server": 1,
+    "test_worker_session": 6,
+    "test_worker_status": 12
+  },
+  "observation_scheduler_implemented": true,
+  "observation_deployed": false,
+  "worker_credentials_provisioned": false,
+  "saved_key_worker_bridge_implemented": false
+}

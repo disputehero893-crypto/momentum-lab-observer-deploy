@@ -1,0 +1,11 @@
+{
+  "DEMO-A": {
+    "float_shares": null,
+    "float_effective_at": null,
+    "float_known_at": null,
+    "catalyst_confirmed": false,
+    "catalyst_published_at": null,
+    "catalyst_known_at": null,
+    "source_notes": "Placeholder only. Replace the symbol and supply independently verified point-in-time facts before paper evaluation."
+  }
+}

@@ -1,0 +1,56 @@
+# Existing observation-only deployment; service and Blueprint automatic updates are off.
+# From the repository root, select worker/render-observe.yaml as the Blueprint path.
+services:
+  - type: web
+    name: momentum-lab-observer
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: ./worker
+    # Render replaces CMD; the Dockerfile's privilege-dropping ENTRYPOINT remains.
+    dockerCommand: serve-observe
+    numInstances: 1
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    disk:
+      name: momentum-observation-journal
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: MOMENTUM_MODE
+        value: paper
+      - key: PAPER_TRADING_ENABLED
+        value: "false"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: JOURNAL_PATH
+        value: /var/data/momentum.sqlite3
+      - key: EXPORT_DIR
+        value: /var/data/exports
+      - key: POLL_SECONDS
+        value: "5"
+      - key: WORKER_CONTROL_TOKEN
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: https://id-preview--31bc21f0-6b6a-43e5-8d84-96ea1d806889.lovable.app
+      - key: SUPABASE_URL
+        value: https://wusnuhzjslikzswkahle.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OWNER_USER_ID
+        sync: false
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      - key: ALPACA_DATA_FEED
+        value: iex
+      - key: WATCHLIST
+        # Approved connection-test symbols; the observer cannot submit orders.
+        value: AAPL,MSFT,SPY
+      - key: ACCOUNTING_HISTORY_START
+        value: ""
+      - key: ACCOUNTING_COST_POLICY
+        value: actual

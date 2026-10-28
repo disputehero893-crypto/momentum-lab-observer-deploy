@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+data/
+exports/
+symbol_metadata.json
+*.sqlite3*
+*.worker.lock
+

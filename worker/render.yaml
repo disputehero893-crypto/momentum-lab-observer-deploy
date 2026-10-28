@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: momentum-lab-worker
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: ./worker
+    numInstances: 1
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    disk:
+      name: momentum-journal
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: MOMENTUM_MODE
+        value: demo
+      - key: PAPER_TRADING_ENABLED
+        value: "false"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: JOURNAL_PATH
+        value: /var/data/momentum.sqlite3
+      - key: EXPORT_DIR
+        value: /var/data/exports
+      - key: WORKER_CONTROL_TOKEN
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+
