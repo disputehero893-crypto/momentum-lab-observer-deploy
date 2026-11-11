@@ -250,8 +250,9 @@ class PaperSession:
             control = self.journal.kill_switch()
 
             def checkpoint(label):
-                self.journal.append("paper-state", "paper_risk_state", {"state": self.risk.to_state()},
-                                    key=f"risk-state:{cycle_id}:{label}", timestamp=self.clock().isoformat())
+                (self.journal.append_sampled if not execute else self.journal.append)(
+                    "paper-state", "paper_risk_state", {"state": self.risk.to_state()},
+                    key=f"risk-state:{cycle_id}:{label}", timestamp=self.clock().isoformat())
 
             # Account loss/stop latches do not depend on an entry or usable quote.
             watchdog_quote = next(iter(by_symbol.values()))["quote"] if by_symbol else {}
@@ -369,9 +370,13 @@ class PaperSession:
                       "reconciled": False, "execute_requested": execute, "actions": actions, "decisions": decisions,
                       "errors": sorted(set(errors+[type(exc).__name__])),
                       "positions_confirmed_flat": False, "live_execution_supported": False}
-        self.journal.append("paper-state", "paper_risk_state", {"state": self.risk.to_state()},
-                            key="risk-state:"+cycle_id, timestamp=self.clock().isoformat())
-        self.journal.append(run_id, "paper_cycle", plain(result), key="paper-cycle:"+cycle_id,
-                            timestamp=self.clock().isoformat())
+        write = self.journal.append_sampled if not execute else self.journal.append
+        write("paper-state", "paper_risk_state", {"state": self.risk.to_state()},
+              key="risk-state:"+cycle_id, timestamp=self.clock().isoformat())
+        write(run_id, "paper_cycle", plain(result), key="paper-cycle:"+cycle_id,
+              timestamp=self.clock().isoformat(),
+              **({"signature": canonical_json(plain([result.get("connected"), result.get("reconciled"),
+                                               result.get("errors"), result.get("actions")]))}
+                 if not execute else {}))
         return plain(result)
 

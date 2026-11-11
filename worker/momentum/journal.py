@@ -2,9 +2,14 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
+import logging
 from pathlib import Path
+import shutil
 import sqlite3
+import time
 import uuid
+
+log = logging.getLogger(__name__)
 
 class IdempotencyConflict(ValueError):
     pass
@@ -16,8 +21,14 @@ def canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 class Journal:
-    def __init__(self, path):
+    def __init__(self, path, *, sample_seconds=0.0, min_free_bytes=0):
         self.path = str(path)
+        # Observation telemetry (per-cycle snapshots) may be thinned and is dropped
+        # first when the volume is nearly full; safety events always use append().
+        self.sample_seconds = float(sample_seconds)
+        self.min_free_bytes = int(min_free_bytes)
+        self._sampled = {}
+        self.telemetry_skipped = 0
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.executescript("""
@@ -88,6 +99,43 @@ class Journal:
                 (str(uuid.uuid5(uuid.NAMESPACE_URL, "momentum-lab:" + key)), key, run_id, event_type, stamp, utc_now(), encoded),
             )
             return self._event(db.execute("SELECT * FROM events WHERE idempotency_key=?", (key,)).fetchone())
+
+    def _low_disk(self):
+        if self.min_free_bytes <= 0:
+            return False
+        try:
+            return shutil.disk_usage(Path(self.path).parent).free < self.min_free_bytes
+        except OSError:
+            return False
+
+    def append_sampled(self, run_id, event_type, payload, *, key, timestamp=None, signature=None):
+        """Best-effort telemetry append.
+
+        Writes at most once per ``sample_seconds`` per event type unless ``signature``
+        (or the payload) changed, and is skipped, never fatal, when free space is below
+        ``min_free_bytes`` or SQLite reports the volume full. Returns the event or None.
+        """
+        sig = signature if signature is not None else canonical_json(payload)
+        now = time.monotonic()
+        last = self._sampled.get(event_type)
+        if self.sample_seconds > 0 and last and last[0] == sig and now - last[1] < self.sample_seconds:
+            return None
+        if self._low_disk():
+            self.telemetry_skipped += 1
+            if self.telemetry_skipped == 1 or self.telemetry_skipped % 1000 == 0:
+                log.warning("journal telemetry skipped: free space below %d bytes (%d skipped)",
+                            self.min_free_bytes, self.telemetry_skipped)
+            return None
+        try:
+            event = self.append(run_id, event_type, payload, key=key, timestamp=timestamp)
+        except sqlite3.OperationalError as exc:
+            if "full" not in str(exc).lower():
+                raise
+            self.telemetry_skipped += 1
+            log.warning("journal telemetry skipped: %s", exc)
+            return None
+        self._sampled[event_type] = (sig, now)
+        return event
 
     def event_by_key(self, key):
         with self._connect() as db:

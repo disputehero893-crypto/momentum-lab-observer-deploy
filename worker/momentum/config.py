@@ -39,6 +39,8 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 8787
     poll_seconds: float = 5.0
+    journal_sample_seconds: float = 60.0
+    journal_min_free_mb: int = 64
     quote_max_age_seconds: float = 2.0
     order_ttl_seconds: float = 15.0
     demo_equity: str = "10000"
@@ -70,6 +72,10 @@ class Config:
                 raise ConfigError("CRYPTO_WATCHLIST must contain 1-10 unique uppercase USD crypto pairs") from exc
         if not 1 <= self.port <= 65535:
             raise ConfigError("PORT must be between 1 and 65535")
+        if not 0 <= self.journal_sample_seconds <= 3600:
+            raise ConfigError("JOURNAL_SAMPLE_SECONDS must be between 0 and 3600")
+        if not 0 <= self.journal_min_free_mb <= 10240:
+            raise ConfigError("JOURNAL_MIN_FREE_MB must be between 0 and 10240")
         if not 1 <= self.poll_seconds <= 300:
             raise ConfigError("POLL_SECONDS must be between 1 and 300")
         if not 0 < self.quote_max_age_seconds <= 5:
@@ -130,6 +136,8 @@ class Config:
                 metadata_path=env.get("SYMBOL_METADATA_PATH", "./symbol_metadata.json"),
                 host=env.get("HOST", "127.0.0.1"), port=int(env.get("PORT", "8787")),
                 poll_seconds=float(env.get("POLL_SECONDS", "5")),
+                journal_sample_seconds=float(env.get("JOURNAL_SAMPLE_SECONDS", "60")),
+                journal_min_free_mb=int(env.get("JOURNAL_MIN_FREE_MB", "64")),
                 quote_max_age_seconds=float(env.get("QUOTE_MAX_AGE_SECONDS", "2")),
                 order_ttl_seconds=float(env.get("ORDER_TTL_SECONDS", "15")),
                 demo_equity=env.get("DEMO_EQUITY", "10000"),
