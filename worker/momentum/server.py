@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, unquote, parse_qs
 import uuid
 
 from .demo import run_demo, RUN_ID
+from .diskstatus import disk_status
 from .journal import Journal, canonical_json
 
 
@@ -17,6 +18,14 @@ class Application:
         self.mutation_lock = threading.Lock()
         self.observation_worker = observation_worker
 
+    def journal_disk(self, *, coarse=False):
+        # Numbers only. min-free comes from JOURNAL_MIN_FREE_MB when the journal guard is present.
+        status = disk_status(self.config.db_path,
+                             min_free_bytes=int(getattr(self.config, "journal_min_free_mb", 0)) * 1024 * 1024)
+        if coarse:
+            return {key: status.get(key) for key in ("available", "used_percent", "low")}
+        return status
+
     def readiness(self):
         observed = self.observation_worker.state() if self.observation_worker else None
         latest = observed.get("latest_cycle") if observed else None
@@ -26,6 +35,7 @@ class Application:
                 "observation_running": bool(observed and observed["running"]),
                 "paper_execution_running": False, "live_execution_supported": False,
                 "configuration": self.config.public(), "control": self.journal.kill_switch(),
+                "journal_disk": self.journal_disk(),
                 "capabilities": {"synthetic_replay": True, "authenticated_journal_api": True,
                                  "paper_adapter": "implemented_and_offline_tested",
                                  "paper_session_controller": "reusable_offline_tested_component",
@@ -112,7 +122,8 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
             parsed = urlsplit(self.path)
             path = unquote(parsed.path)
             if path == "/health":
-                self.send(200, {"status": "ok", "service": "momentum-lab"})
+                # Always 200 so a low disk degrades telemetry instead of tripping a restart loop.
+                self.send(200, {"status": "ok", "service": "momentum-lab", "journal_disk": app.journal_disk(coarse=True)})
                 return
             if not self.authorized():
                 return
