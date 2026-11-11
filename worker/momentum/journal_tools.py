@@ -95,7 +95,7 @@ def compact(src, dst, archive, *, keep_days=7, now=None):
             d.execute(sql)
         tables = [n for k, n, _ in schema if k == "table"]
         drop_where = _droppable_clause()
-        manifest = {"source": src.name, "cutoff_recorded_at": cutoff, "archived_rows": 0, "archive_sha256": None,
+        manifest = {"source": src.name, "cutoff_recorded_at": cutoff, "archived_rows": 0,
                     "copied": {}, "telemetry_types": list(TELEMETRY_TYPES)}
         digest = hashlib.sha256()
         with gzip.open(archive, "wt", encoding="utf-8") as out:
