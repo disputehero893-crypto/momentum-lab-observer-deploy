@@ -16,7 +16,8 @@ def armed_config(directory):
     metadata.write_text("{}")
     cfg = Config(mode="paper", paper_enabled=True, api_key="FAKE-KEY", api_secret="FAKE-SECRET",
                  watchlist=("DEMO-A", "DEMO-B", "DEMO-C"), metadata_path=str(metadata),
-                 db_path=str(Path(directory)/"journal.sqlite3"), export_dir=str(Path(directory)/"exports"))
+                 db_path=str(Path(directory)/"journal.sqlite3"), export_dir=str(Path(directory)/"exports"),
+                 journal_sample_seconds=0)
     return replace(cfg, paper_reviewed_config_hash=cfg.review_hash())
 
 

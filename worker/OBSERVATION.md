@@ -157,3 +157,23 @@ The Market Watch implementation passed a separate set of **51 focused tests**: *
 - [Render disk/workspace price source](https://render.com/articles/how-much-does-cloud-application-hosting-cost-for-small-businesses)
 - [Render Blueprint fields](https://render.com/docs/blueprint-spec)
 - [Render persistent-disk behavior](https://render.com/docs/disks)
+
+## Journal growth and low-disk guard
+
+The observation worker used to persist four events per cycle (`paper_observation_cycle`,
+two `paper_risk_state`, `paper_cycle`). At `POLL_SECONDS=5` that is about 128 MB/day and
+filled the 1 GB `/var/data` disk in roughly eight days, after which every start failed with
+`sqlite3.OperationalError: database or disk is full`.
+
+Observation telemetry is now sampled:
+
+- `JOURNAL_SAMPLE_SECONDS` (default `60`, `0` = write every cycle): an unchanged cycle is
+  persisted at most once per window. A change in blockers, error code, halt state, broker/data
+  verification, publication state, acknowledged commands, or session errors/actions is
+  persisted immediately. Expected growth is about 11 MB/day.
+- `JOURNAL_MIN_FREE_MB` (default `64`, `0` = off): below this free space, telemetry is skipped
+  (with a warning) instead of crashing the worker. Kill-switch, account-binding, idempotent
+  order, and trade events always use the strict `append()` path.
+- Sampling applies only when `execute=False` (the observation runtime). Paper execution paths
+  keep writing every event.
+- `observation_stopped` no longer masks the original error with a second traceback.

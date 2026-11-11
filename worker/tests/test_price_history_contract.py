@@ -124,7 +124,8 @@ class HistoryProvider:
 def config_for(directory=None, *, cloud=False):
     values = dict(mode="paper", paper_enabled=False, api_key="FAKE-HISTORY-KEY",
                   api_secret="FAKE-HISTORY-SECRET", watchlist=SYMBOLS, data_feed="iex",
-                  accounting_history_start="", quote_max_age_seconds=2)
+                  accounting_history_start="", quote_max_age_seconds=2,
+                  journal_sample_seconds=0)
     if directory is not None:
         values.update(db_path=str(Path(directory) / "new-history-test.sqlite3"),
                       metadata_path=str(Path(directory) / "absent-metadata.json"))
