@@ -11,9 +11,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from offline_network import offline_pythonpath
+
 from momentum import decision_replay as replay
 from momentum.models import plain
-from momentum.strategy import StrategyConfig, evaluate_setup
+from momentum.strategy import StrategyConfig, evaluate_setup, load_strategy
 
 
 WORKER = Path(__file__).resolve().parents[1]
@@ -53,7 +55,7 @@ class DecisionReplayTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, "-m", "momentum.decision_replay", *map(str, args)],
             cwd=cwd or WORKER, capture_output=True, text=True, timeout=10,
-            env={"PYTHONPATH": str(WORKER), "PYTHONDONTWRITEBYTECODE": "1",
+            env={"PYTHONPATH": offline_pythonpath(WORKER), "PYTHONDONTWRITEBYTECODE": "1",
                  "PYTHONIOENCODING": "utf-8"})
 
     def test_example_is_exact_engine_output_with_explicit_nonexecution_flags(self):
@@ -67,11 +69,13 @@ class DecisionReplayTests(unittest.TestCase):
         self.assertIs(report["performance_calculated"], False)
         self.assertEqual(report["risk_assessment"], "not_evaluated")
         self.assertEqual(report["frame_count"], 4)
-        self.assertEqual(report["strategy_settings"], plain(asdict(StrategyConfig())))
+        pinned = load_strategy(original["strategy_overrides"])
+        self.assertEqual(report["strategy_settings"], plain(asdict(pinned)))
+        self.assertNotEqual(pinned.config_id, StrategyConfig().config_id)
         expected = ["first_pullback_breakout", "float_unconfirmed", "spread_too_wide", "lookahead_bar"]
         for before, after, reason in zip(original["frames"], report["frames"], expected):
             with self.subTest(identity=before["id"]):
-                self.assertEqual(after["decision"], evaluate_setup(before["snapshot"]).to_dict())
+                self.assertEqual(after["decision"], evaluate_setup(before["snapshot"], pinned).to_dict())
                 self.assertEqual(after["decision"]["reasons"], [reason])
                 self.assertEqual(after["snapshot"], before["snapshot"])
                 self.assertEqual(after["id"], before["id"])
@@ -89,7 +93,7 @@ class DecisionReplayTests(unittest.TestCase):
         report = json.loads(first)
         self.assertEqual(first, canonical(report) + b"\n")
         self.assertEqual(report["input_sha256"], sha256(canonical(value)).hexdigest())
-        self.assertEqual(report["config_id"], StrategyConfig().config_id)
+        self.assertEqual(report["config_id"], load_strategy(value["strategy_overrides"]).config_id)
         row = report["frames"][0]
         self.assertEqual(row["frame_sha256"], sha256(canonical(value["frames"][0])).hexdigest())
         self.assertEqual(row["snapshot_sha256"], sha256(canonical(value["frames"][0]["snapshot"])).hexdigest())
@@ -105,9 +109,9 @@ class DecisionReplayTests(unittest.TestCase):
         default_cfg = plain(asdict(StrategyConfig()))
         original = json.loads(replay.replay_bytes(encode(value)))
         overridden = deepcopy(value)
-        overridden["strategy_overrides"] = {"target_r": "3"}
+        overridden["strategy_overrides"] = {**value["strategy_overrides"], "target_r": "3"}
         changed = json.loads(replay.replay_bytes(encode(overridden)))
-        cfg = StrategyConfig(target_r="3")
+        cfg = load_strategy(overridden["strategy_overrides"])
         self.assertEqual(changed["config_id"], cfg.config_id)
         self.assertEqual(changed["strategy_settings"], plain(asdict(cfg)))
         self.assertNotEqual(original["config_id"], changed["config_id"])
@@ -136,7 +140,7 @@ class DecisionReplayTests(unittest.TestCase):
                 if reason == "future_quote":
                     snapshot["quote"]["received_at"] = replacement
                 actual = json.loads(replay.replay_bytes(encode(value)))["frames"][0]["decision"]
-                self.assertEqual(actual, evaluate_setup(snapshot).to_dict())
+                self.assertEqual(actual, evaluate_setup(snapshot, load_strategy(value["strategy_overrides"])).to_dict())
                 self.assertFalse(actual["accepted"])
                 if reason:
                     self.assertIn(reason, actual["reasons"])
@@ -149,7 +153,7 @@ class DecisionReplayTests(unittest.TestCase):
         snapshot["quote"]["received_at"] = "2026-10-16T13:35:01.000000000+00:00"
         snapshot["rvol"]["as_of"] = "2026-10-16T13:35:00.000000000Z"
         snapshot["rvol"]["history"][0]["clock"] = "09:35:00.000000000"
-        value["strategy_overrides"] = {"trade_start_et": "07:00:00.000000000"}
+        value["strategy_overrides"] = {**value["strategy_overrides"], "trade_start_et": "07:00:00.000000000"}
         row = json.loads(replay.replay_bytes(encode(value)))["frames"][0]
         self.assertTrue(row["decision"]["accepted"])
         self.assertEqual(row["snapshot"], snapshot)
@@ -255,7 +259,8 @@ class DecisionReplayTests(unittest.TestCase):
         raw = canonical(document())
         duplicate = [raw.replace(b'"schema_version":"1.0"', b'"schema_version":"1.0","schema_version":"1.0"'),
                      raw.replace(b'"ask":"6.31"', b'"ask":"6.31","ask":"6.32"'),
-                     raw.replace(b'"strategy_overrides":{}', b'"strategy_overrides":{"target_r":"2","target_r":"3"}')]
+                     raw.replace(b'"preset":"small_cap_catalyst_v1"',
+                                 b'"preset":"small_cap_catalyst_v1","preset":"small_cap_catalyst_v1"')]
         for value in duplicate:
             self.assert_error("duplicate_json_key", value)
         for token in (b"6.31", b"6e0", b"1E-5"):
@@ -417,7 +422,7 @@ class DecisionReplayTests(unittest.TestCase):
     def test_fresh_subprocess_blocks_network_and_all_other_worker_imports(self):
         script = '''
 import sys
-allowed = {"momentum", "momentum.models", "momentum.strategy", "momentum.decision_replay"}
+allowed = {"momentum", "momentum.models", "momentum.presets", "momentum.strategy", "momentum.decision_replay"}
 network = {"socket", "urllib", "http", "requests", "httpx", "urllib3", "ftplib", "smtplib"}
 class Boundaries:
     def find_spec(self, fullname, path=None, target=None):
@@ -438,7 +443,7 @@ print("offline_boundary_verified")
 '''
         result = subprocess.run([sys.executable, "-c", script, str(EXAMPLE)], cwd=WORKER,
                                 capture_output=True, text=True, timeout=10,
-                                env={"PYTHONPATH": str(WORKER), "PYTHONDONTWRITEBYTECODE": "1"})
+                                env={"PYTHONPATH": offline_pythonpath(WORKER), "PYTHONDONTWRITEBYTECODE": "1"})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "offline_boundary_verified\n")
         self.assertEqual(result.stderr, "")

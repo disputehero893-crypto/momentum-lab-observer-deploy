@@ -18,11 +18,13 @@ from momentum.config import Config
 from momentum.market_observation import MarketWatchCollector
 from momentum.models import NY
 from momentum.publisher import Publisher
+from momentum.presets import PROFILE_LIQUID_IEX
 from momentum.strategy import StrategyConfig
 from momentum.strategy_review import build_strategy_review
 
 
 NOW = datetime(2026, 10, 16, 13, 35, 5, tzinfo=timezone.utc)
+EXPERIMENTAL = StrategyConfig.small_cap_catalyst()
 SYMBOLS = ("AAPL", "MSFT", "SPY")
 OWNER = "00000000-0000-4000-8000-000000000041"
 INSTANCE = "00000000-0000-4000-8000-000000000042"
@@ -96,7 +98,7 @@ class ReviewContractTests(unittest.TestCase):
     def test_default_identity_and_missing_requirements_do_not_claim_a_completed_screen(self):
         result = self.review()
         self.assertEqual(result["schema_version"], "1.0")
-        self.assertEqual(result["profile"], "experimental_v1")
+        self.assertEqual(result["profile"], PROFILE_LIQUID_IEX)
         self.assertEqual(result["config_id"], StrategyConfig().config_id)
         self.assertEqual(result["requested_symbols"], list(SYMBOLS))
         self.assertEqual(result["evidence_ref"], "market_watch")
@@ -110,9 +112,10 @@ class ReviewContractTests(unittest.TestCase):
         self.assertEqual(result["source_basis"]["threshold_fields"],
                          ["min_price", "max_price", "min_gain_pct", "min_rvol", "max_float_exclusive"])
         self.assertEqual(result["source_basis"]["source_ids"], ["S10", "S12"])
-        self.assertTrue(result["source_basis"]["thresholds_match"])
+        self.assertFalse(result["source_basis"]["thresholds_match"])
         self.assertTrue(result["source_basis"]["experimental_defaults_match"])
-        self.assertEqual(result["source_basis"]["differing_threshold_fields"], [])
+        self.assertEqual(result["source_basis"]["differing_threshold_fields"],
+                         ["min_price", "max_price", "min_gain_pct", "min_rvol"])
         self.assertEqual(result["source_basis"]["differing_experimental_fields"], [])
         self.assert_observational(result)
 
@@ -127,7 +130,7 @@ class ReviewContractTests(unittest.TestCase):
             ("1.99", "20.01", "price_outside_range", "both_prices_outside_range"),
         ):
             with self.subTest(ask=ask, trade=trade):
-                self.assertEqual(self.price(emitted_watch(ask=ask, trade=trade)),
+                self.assertEqual(self.price(emitted_watch(ask=ask, trade=trade), config=EXPERIMENTAL),
                                  {"state": state, "reason": reason})
 
     def test_missing_quote_or_trade_remains_unavailable_even_if_other_price_is_known(self):
@@ -198,7 +201,7 @@ class ReviewContractTests(unittest.TestCase):
                                              ("max_hold_seconds", 599, []),
                                              ("max_catalyst_age_hours", 12, [])):
             with self.subTest(field=field):
-                cfg = replace(StrategyConfig(), **{field: value})
+                cfg = replace(EXPERIMENTAL, **{field: value})
                 result = self.review(config=cfg)
                 basis = result["source_basis"]
                 self.assertEqual(result["config_id"], cfg.config_id)
@@ -213,7 +216,7 @@ class ReviewContractTests(unittest.TestCase):
         watch = emitted_watch(now=now)
         self.assertEqual(watch["session"]["status"], "closed")
         self.assertIs(watch["session"]["is_trading_day"], True)
-        result = self.review(watch, now=now)
+        result = self.review(watch, config=EXPERIMENTAL, now=now)
         self.assertEqual(result["experimental_window"]["state"], "inside")
         self.assertEqual(result["experimental_window"]["date"], "2026-10-16")
         self.assert_observational(result)
@@ -223,7 +226,7 @@ class ReviewContractTests(unittest.TestCase):
         watch = emitted_watch(now=now, trading_day=False)
         self.assertIs(watch["session"]["is_trading_day"], False)
         self.assertEqual(watch["session"]["status"], "closed")
-        result = self.review(watch, now=now)
+        result = self.review(watch, config=EXPERIMENTAL, now=now)
         self.assertEqual(result["experimental_window"]["state"], "inside")
         self.assertEqual(result["calendar_ref"], "market_watch.session")
         self.assert_observational(result)
@@ -236,7 +239,7 @@ class ReviewContractTests(unittest.TestCase):
             (datetime(2026, 10, 17, 0, 30, tzinfo=timezone.utc), "outside", "2026-10-16"),
         ):
             with self.subTest(now=now):
-                result = self.review(emitted_watch(now=now), now=now)
+                result = self.review(emitted_watch(now=now), config=EXPERIMENTAL, now=now)
                 self.assertEqual(result["experimental_window"], {
                     "timezone": "America/New_York", "date": expected_date, "state": expected})
 
@@ -287,7 +290,8 @@ class ReviewContractTests(unittest.TestCase):
         expected = StrategyConfig(**cfg.strategy_overrides)
         self.assertEqual(review["config_id"], expected.config_id)
         self.assertFalse(review["source_basis"]["thresholds_match"])
-        self.assertEqual(review["source_basis"]["differing_threshold_fields"], ["min_price"])
+        self.assertEqual(review["source_basis"]["differing_threshold_fields"],
+                         ["min_price", "max_price", "min_gain_pct", "min_rvol"])
         self.assertEqual(review["source_basis"]["differing_experimental_fields"],
                          ["min_price", "max_hold_seconds"])
         self.assertEqual(Decimal(review["settings"]["min_price"]), Decimal(3))

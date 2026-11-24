@@ -7,11 +7,13 @@ The current Market Watch contract contains no evidence for the other four
 selection pillars, so every overall review remains incomplete.
 
 S10/S12 in STRATEGY_NOTES.md identify a particular instructional 2024 variant:
-$2-$20, gain >=10%, RVOL >=5 and float <20 million. The comparison below applies
+$2-$20, gain >=10%, RVOL >=5 and float <20 million. Those five numbers are the
+gated small-cap preset, not the liquid IEX default. The comparison below applies
 only to those five numeric configuration fields. The 30-session same-clock RVOL,
 freshness policy, seven-day float, 24-hour catalyst, and entry window are explicit
 experimental choices. A numeric source match never labels the whole experiment
-as an exact reproduction of the source trader's method.
+as an exact reproduction of the source trader's method. `experimental_defaults_match`
+compares the 27 pattern and threshold fields with the active preset's own defaults.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ from decimal import Decimal
 from .activities import timestamp_parts
 from .market_observation import sanitize_market_watch
 from .models import NY
-from .strategy import StrategyConfig
+from .strategy import StrategyConfig, load_strategy
 
 
 SCHEMA_VERSION = "1.0"
@@ -158,10 +160,10 @@ def build_strategy_review(market_watch, config, *, now):
     inside = time.fromisoformat(cfg.trade_start_et) <= local.time() < time.fromisoformat(cfg.trade_end_et)
     threshold_changes = [field for field in SOURCE_THRESHOLD_FIELDS
                          if getattr(cfg, field) != SOURCE_THRESHOLDS[field]]
-    defaults = StrategyConfig()
+    defaults = load_strategy({"preset": cfg.preset})
     experimental_changes = [field for field in EXPERIMENTAL_FIELDS if getattr(cfg, field) != getattr(defaults, field)]
     settings = {field: _setting(getattr(cfg, field)) for field in SETTING_FIELDS}
-    settings.update(rvol_session_start_et="04:00", catalyst_required=True)
+    settings.update(rvol_session_start_et="04:00", catalyst_required=cfg.requires_float_catalyst)
     rows = []
     for row in watch["rows"]:
         rows.append({"symbol": row["symbol"], "overall": "incomplete",

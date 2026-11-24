@@ -25,8 +25,9 @@ from momentum.market_observation import (
     sanitize_market_watch,
 )
 from momentum.models import NY
-from momentum.observation import ObservationWorker, ReadOnlyPaperClient
+from momentum.observation import ReadOnlyPaperClient
 from momentum.publisher import Publisher
+from observer_fixtures import offline_observation_worker
 
 
 SYMBOLS = ("AAPL", "MSFT", "SPY")
@@ -121,8 +122,9 @@ class OfflineCase(unittest.TestCase):
     def setUp(self):
         blocker = patch("urllib.request.OpenerDirector.open",
                         side_effect=AssertionError("Network access is forbidden in Market Watch tests"))
-        blocker.start()
+        blocked = blocker.start()
         self.addCleanup(blocker.stop)
+        self.addCleanup(blocked.assert_not_called)
 
     def collector(self, *, clock=None):
         cfg = config_for()
@@ -474,7 +476,7 @@ class MarketWatchRuntimeTests(OfflineCase):
             publisher = Publisher(cfg, transport=cloud, clock=fixture.clock)
             with patch("momentum.data.Path.read_text", side_effect=AssertionError(
                     "The default observer must not read strategy metadata")) as metadata_read, \
-                    ObservationWorker(cfg, provider=fixture.client, publisher=publisher,
+                    offline_observation_worker(cfg, provider=fixture.client, publisher=publisher,
                     activity_fetcher=forbidden_history, clock=fixture.clock, instance_id=INSTANCE) as worker:
                 result = worker.cycle()
                 metadata_read.assert_not_called()
@@ -535,7 +537,7 @@ class MarketWatchRuntimeTests(OfflineCase):
                     fixture.clock.advance(failure_delay)
                     raise BrokerError(PRIVATE_SENTINEL)
                 publisher = Publisher(cfg, transport=cloud, clock=fixture.clock)
-                with ObservationWorker(cfg, provider=fixture.client, publisher=publisher,
+                with offline_observation_worker(cfg, provider=fixture.client, publisher=publisher,
                         clock=fixture.clock, instance_id=INSTANCE) as worker:
                     with patch.object(worker, "_accounting", side_effect=fail_accounting) as accounting:
                         result = worker.cycle()

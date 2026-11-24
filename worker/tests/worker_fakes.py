@@ -16,7 +16,9 @@ def armed_config(directory):
     metadata.write_text("{}")
     cfg = Config(mode="paper", paper_enabled=True, api_key="FAKE-KEY", api_secret="FAKE-SECRET",
                  watchlist=("DEMO-A", "DEMO-B", "DEMO-C"), metadata_path=str(metadata),
-                 db_path=str(Path(directory)/"journal.sqlite3"), export_dir=str(Path(directory)/"exports"))
+                 db_path=str(Path(directory)/"journal.sqlite3"), export_dir=str(Path(directory)/"exports"),
+                 strategy_overrides={"allowed_symbols": ["DEMO-A", "DEMO-B", "DEMO-C"]},
+                 journal_sample_seconds=0)
     return replace(cfg, paper_reviewed_config_hash=cfg.review_hash())
 
 
@@ -48,6 +50,17 @@ class FakeVenue:
         snapshot["rvol"]["feed"] = "iex"
         for row in [*snapshot["bars"], *snapshot["rvol"]["history"]]:
             row["feed"] = "iex"
+        # Default preset is liquid_large_cap_iex_v2 (same-clock median gate).
+        # Synthetic fixtures have no adapter-fitted medians; supply generous
+        # prior-session medians so volume checks exercise the relative gate
+        # without blocking every DEMO-* entry fixture.
+        from momentum.models import NY
+        medians = {}
+        for row in snapshot["bars"]:
+            start = datetime.fromisoformat(row["start"].replace("Z", "+00:00")).astimezone(NY)
+            clock = start.timetz().replace(tzinfo=None)
+            medians[clock.strftime("%H:%M:%S")] = 50_000
+        snapshot["same_clock_volume_median"] = {"feed": "iex", "medians": medians}
         self.bid = Decimal(bid)
         return snapshot
 

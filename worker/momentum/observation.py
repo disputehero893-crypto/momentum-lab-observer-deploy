@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
+import sqlite3
 import threading
 import time
 import uuid
@@ -16,7 +17,7 @@ import uuid
 from .activities import fetch_activities, timestamp_parts
 from .alpaca import BrokerError, PaperClient, PaperDisabled, parse_time
 from .data import SnapshotBuilder
-from .journal import Journal
+from .journal import Journal, canonical_json
 from .ledger import AccountingLedger
 from .market_observation import (MarketWatchCollector, market_data_evidence,
                                  market_watch_from_snapshots, sanitize_market_watch)
@@ -25,6 +26,7 @@ from .publisher import Publisher
 from .price_history import PriceHistoryCollector, price_history_summary, sanitize_price_history
 from .crypto_observation import (CryptoQuoteReader, CryptoWatchCollector,
                                  sanitize_crypto_watch, crypto_watch_summary)
+from . import paper_run_hooks
 from .session import PaperSession
 
 
@@ -137,7 +139,8 @@ class ObservationWorker:
         self.stop_event = threading.Event()
         raw = provider or ReadOnlyPaperClient(config, clock=self.clock, stop_event=self.stop_event)
         self.provider = _ReadOnlyProvider(raw, self.stop_event)
-        self.journal = journal or Journal(config.db_path)
+        self.journal = journal or Journal(config.db_path, sample_seconds=config.journal_sample_seconds,
+                                          min_free_bytes=config.journal_min_free_mb * 1024 * 1024)
         self._injected_builder = snapshot_builder
         self.builder = snapshot_builder or SnapshotBuilder(self.provider, config)
         self.market_collector = MarketWatchCollector(self.provider, config, clock=self.clock)
@@ -153,6 +156,7 @@ class ObservationWorker:
         self.publisher = publisher if publisher is not None else (Publisher(config, clock=self.clock) if all(cloud) else None)
         if any(cloud) and not all(cloud):
             raise ObservationError("incomplete_cloud_worker_configuration")
+        paper_run_hooks.attach_logger(self)
         self.fetch_activities = activity_fetcher or fetch_activities
         self._cycle_lock, self._state_lock = threading.Lock(), threading.Lock()
         self._active = False
@@ -169,9 +173,17 @@ class ObservationWorker:
             if binding and (binding["payload"].get("environment") != "paper"
                     or binding["payload"].get("owner_user_id") != (self.config.owner_user_id or None)):
                 raise ObservationError("paper_account_or_owner_binding_mismatch")
-            self.journal.append("paper-observation", "observation_started",
-                {"instance_id": self.instance_id, "mode": "paper", "execution_enabled": False},
-                key="observe-start:" + self.instance_id, timestamp=self.clock().isoformat())
+            try:
+                self.journal.append("paper-observation", "observation_started",
+                    {"instance_id": self.instance_id, "mode": "paper", "execution_enabled": False},
+                    key="observe-start:" + self.instance_id, timestamp=self.clock().isoformat())
+            except sqlite3.OperationalError as exc:
+                if self.journal._is_full_volume_error(exc):
+                    # Refuse to observe without a durable audit trail, but say why and how to fix it.
+                    # Ambiguous I/O errors keep their original meaning unless low space is measured.
+                    raise ObservationError("journal_volume_full_grow_the_disk_or_free_space") from None
+                raise
+            paper_run_hooks.start_session(self)
             self._active = True
         except BaseException:
             self.session.__exit__()
@@ -188,9 +200,14 @@ class ObservationWorker:
                 except Exception:
                     # No stale evidence is refreshed; the last cloud heartbeat expires.
                     pass
-            self.journal.append("paper-observation", "observation_stopped",
-                {"instance_id": self.instance_id, "mode": "paper", "execution_enabled": False},
-                key="observe-stop:" + self.instance_id, timestamp=self.clock().isoformat())
+            paper_run_hooks.close_session(self, status="stopped")
+            try:
+                self.journal.append("paper-observation", "observation_stopped",
+                    {"instance_id": self.instance_id, "mode": "paper", "execution_enabled": False},
+                    key="observe-stop:" + self.instance_id, timestamp=self.clock().isoformat())
+            except sqlite3.OperationalError:
+                # Never mask the original failure (e.g. volume full) with a second traceback.
+                pass
         finally:
             self._active = False
             self.session.__exit__(*args)
@@ -392,9 +409,16 @@ class ObservationWorker:
             journal_result = {**result, "price_history": price_history_summary(result["price_history"])}
             if "crypto_watch" in journal_result:
                 journal_result["crypto_watch"] = crypto_watch_summary(result["crypto_watch"])
-            self.journal.append("paper-observe-" + started.astimezone(NY).date().isoformat(),
+            paper_run_hooks.record_cycle(self, result)
+            # Per-cycle snapshots dominate journal growth (about 128 MB/day at a 5 s poll).
+            # Persist on change of health/blockers, otherwise at most once per sample window.
+            self.journal.append_sampled("paper-observe-" + started.astimezone(NY).date().isoformat(),
                 "paper_observation_cycle", journal_result, key="observe-cycle:" + cycle_id,
-                timestamp=result["completed_at"])
+                timestamp=result["completed_at"],
+                signature=canonical_json([result["error_code"], result["blockers"], result["halted"],
+                                          result["broker"]["verified"], result["data_feed"].get("verified"),
+                                          result["cloud_state_published"],
+                                          result["acknowledged_commands"]]))
             with self._state_lock:
                 self._latest = deepcopy(result)
             return deepcopy(result)

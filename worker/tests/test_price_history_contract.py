@@ -21,9 +21,10 @@ from momentum.config import Config
 from momentum.journal import Journal
 from momentum.market_observation import MarketWatchCollector
 from momentum.models import NY
-from momentum.observation import ObservationWorker, ReadOnlyPaperClient
+from momentum.observation import ReadOnlyPaperClient
 from momentum.price_history import PriceHistoryCollector, price_history_summary, sanitize_price_history
 from momentum.publisher import Publisher
+from observer_fixtures import offline_observation_worker
 
 
 SYMBOLS = ("AAPL", "MSFT", "SPY")
@@ -124,7 +125,8 @@ class HistoryProvider:
 def config_for(directory=None, *, cloud=False):
     values = dict(mode="paper", paper_enabled=False, api_key="FAKE-HISTORY-KEY",
                   api_secret="FAKE-HISTORY-SECRET", watchlist=SYMBOLS, data_feed="iex",
-                  accounting_history_start="", quote_max_age_seconds=2)
+                  accounting_history_start="", quote_max_age_seconds=2,
+                  journal_sample_seconds=0)
     if directory is not None:
         values.update(db_path=str(Path(directory) / "new-history-test.sqlite3"),
                       metadata_path=str(Path(directory) / "absent-metadata.json"))
@@ -203,8 +205,9 @@ class PriceHistoryContractTests(unittest.TestCase):
     def setUp(self):
         blocker = patch("urllib.request.OpenerDirector.open", side_effect=AssertionError(
             "Network access is forbidden in price-history tests"))
-        blocker.start()
+        blocked = blocker.start()
         self.addCleanup(blocker.stop)
+        self.addCleanup(blocked.assert_not_called)
 
     def collector(self, *, clock=None):
         provider = HistoryProvider(clock=clock)
@@ -718,7 +721,7 @@ class PriceHistoryContractTests(unittest.TestCase):
             publisher = Publisher(cfg, transport=cloud, clock=fixture.clock)
             with patch("momentum.data.Path.read_text", side_effect=AssertionError("Metadata reads are outside this milestone")), \
                  patch.object(fixture.client, "bars", side_effect=AssertionError("Unbounded strategy history must remain dormant")), \
-                 ObservationWorker(cfg, provider=fixture.client, publisher=publisher,
+                 offline_observation_worker(cfg, provider=fixture.client, publisher=publisher,
                                    clock=fixture.clock, instance_id=INSTANCE) as worker:
                 first = worker.cycle()
                 self.assertIsNone(first["error_code"])
@@ -763,7 +766,7 @@ class PriceHistoryContractTests(unittest.TestCase):
             fixture, cloud = ObservationProvider(cfg), CloudTransport()
             publisher = Publisher(cfg, transport=cloud, clock=fixture.clock)
             failing = SimpleNamespace(collect=lambda: (_ for _ in ()).throw(RuntimeError(PRIVATE)))
-            with ObservationWorker(cfg, provider=fixture.client, publisher=publisher,
+            with offline_observation_worker(cfg, provider=fixture.client, publisher=publisher,
                     price_history_collector=failing, clock=fixture.clock, instance_id=INSTANCE) as worker:
                 result = worker.cycle()
                 self.assertIsNone(result["error_code"])

@@ -28,6 +28,26 @@ class SnapshotBuilder:
         self._calendar_cache = (date, sessions, any(record["date"] == date.isoformat() for record in records))
         return sessions
 
+    def chart_bars(self, symbol, limit=60):
+        """Recent completed minute bars from the cached history, for AI charts only.
+
+        Never makes a network request and never feeds the rule strategy.
+        """
+        entries = [(key, value) for key, value in self._history_cache.items() if key[0] == symbol]
+        if not entries:
+            return []
+        (key, (history, _received)) = max(entries, key=lambda item: item[0][2])
+        completed_until = parse_time(key[2])
+        rows = []
+        for bar in history or ():
+            start = parse_time(bar["t"])
+            if start + timedelta(seconds=60) > completed_until:
+                continue
+            rows.append({"start": start.isoformat(), "open": str(bar["o"]), "high": str(bar["h"]),
+                         "low": str(bar["l"]), "close": str(bar["c"]), "volume": str(bar["v"])})
+        rows.sort(key=lambda b: b["start"])
+        return rows[-int(limit):]
+
     def build_watchlist(self):
         at = datetime.now(timezone.utc)
         completed_until = at.replace(second=0, microsecond=0)

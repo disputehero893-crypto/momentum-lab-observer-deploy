@@ -14,6 +14,7 @@ from typing import Any, Mapping
 
 from .models import (Decision, InputError, NY, PROFILE, Quote, config_fingerprint, decimal_value,
                      integer_value, plain, positive_decimal, session_date, timestamp)
+from .presets import APPROVED_PAPER_PROFILES
 
 
 @dataclass(frozen=True)
@@ -189,7 +190,7 @@ class RiskManager:
                 return Decision.reject("no_entry_intent", metrics=metrics)
             if not isinstance(intent, Mapping):
                 return Decision.reject("invalid_intent", metrics=metrics)
-            if intent.get("mode") != "paper" or intent.get("profile") != PROFILE:
+            if intent.get("mode") != "paper" or intent.get("profile") not in APPROVED_PAPER_PROFILES:
                 return Decision.reject("unapproved_intent_mode_or_profile", metrics=metrics)
             if intent.get("side") != "buy":
                 return Decision.reject("only_long_entries_supported", metrics=metrics)

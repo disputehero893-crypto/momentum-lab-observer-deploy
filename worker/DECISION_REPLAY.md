@@ -1,6 +1,6 @@
 # Offline strategy decision replay
 
-This command evaluates caller-supplied snapshots with the existing `experimental_v1` strategy and writes a deterministic local report. Each frame calls `momentum.strategy.evaluate_setup` with the recorded decision time and a validated `StrategyConfig`. It does not load application settings or modify the running worker.
+This command evaluates caller-supplied snapshots with a validated `StrategyConfig` and writes a deterministic local report. Each frame calls `momentum.strategy.evaluate_setup` with the recorded decision time. Empty `strategy_overrides` select the worker default, `liquid_large_cap_iex_v1`. The checked-in example instead pins the gated small-cap preset so its four invented frames keep the results below. It does not load application settings or modify the running worker.
 
 The strategy combines selected instructional screening thresholds with our experimental pattern, timing, and execution assumptions. See [STRATEGY_NOTES.md](STRATEGY_NOTES.md) for those distinctions. This utility does not establish an exact reproduction of Ross Cameron's discretion or provide evidence of profitability.
 
@@ -14,7 +14,7 @@ PYTHONPATH=. python -m momentum.decision_replay examples/decision-replay.synthet
 
 The output path must be new. A successful command prints only `decision_replay_complete`. To repeat the command, choose a different output filename; existing files are never overwritten.
 
-The supplied example contains four independent, invented cases derived from the public `valid_snapshot()` fixture in `tests/test_strategy.py`. The symbol, prices, volumes, news confirmation, float evidence, and session history are artificial. All four cases deliberately share one decision time; they do not form a continuous market path.
+The supplied example contains four independent, invented cases derived from the public `valid_snapshot()` fixture in `tests/test_strategy.py`. Its `strategy_overrides` pin `small_cap_catalyst_v1` and open that preset's gate for this file only. The symbol, prices, volumes, news confirmation, float evidence, and session history are artificial. All four cases deliberately share one decision time; they do not form a continuous market path. They are not an example of the liquid IEX default.
 
 | Frame | Actual engine result | Interpretation |
 | --- | --- | --- |
@@ -50,7 +50,7 @@ The abbreviated snapshot above illustrates the wrapper only. It lacks the eviden
 
 Every frame has exactly `id` and `snapshot`. IDs are unique, 1–64 characters, begin with an ASCII letter or digit, and otherwise contain only ASCII letters, digits, underscores, dots, or hyphens. Snapshots remain in supplied order. Their `now` timestamps must be timezone-aware and globally nondecreasing, including across different symbols. Different cases may have equal decision times. The host's current time is never substituted or used to move a frame into a different session.
 
-`strategy_overrides` accepts only existing `StrategyConfig` field names and values that the current class validates. Quote decimal settings as strings, for example `"target_r": "3"`; integral settings such as `max_hold_seconds` use JSON integers. Monetary and other decimal snapshot values should likewise use strings. Floating JSON number tokens, including exponent-form numeric tokens, are rejected throughout the input. JSON booleans cannot stand in for integer configuration values. The supported mode and profile remain `paper` and `experimental_v1`; arbitrary profile names or live mode are rejected.
+`strategy_overrides` accepts only existing `StrategyConfig` field names and values that the current class validates. Quote decimal settings as strings, for example `"target_r": "3"`; integral settings such as `max_hold_seconds` use JSON integers. `enable_gated_presets` and `requires_float_catalyst` are JSON booleans. `allowed_symbols` is a JSON list of symbol strings. Monetary and other decimal snapshot values should likewise use strings. Floating JSON number tokens, including exponent-form numeric tokens, are rejected throughout the input. JSON booleans cannot stand in for integer configuration values. The only mode is `paper`. The profile has to match the selected preset: `liquid_large_cap_iex_v1` or, for the gated small-cap preset, `experimental_v1`. Live mode and any other profile are rejected. An override that names `preset` starts from that preset's defaults, then applies the rest of the object.
 
 For a local comparison, copy the example to a new input file and change its `strategy_overrides`, for example:
 

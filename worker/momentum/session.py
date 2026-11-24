@@ -16,7 +16,9 @@ from .journal import Journal, canonical_json
 from .lease import WorkerLease
 from .models import NY, plain
 from .risk import RiskConfig, RiskManager
-from .strategy import StrategyConfig, evaluate_setup, evaluate_exit
+from .strategy import evaluate_setup, evaluate_exit, load_strategy
+from .ai_advisor import AIAdvisor, PRIORITY
+from .ai_cotrade import build_ai_intent
 
 TERMINAL = {"filled", "canceled", "expired", "rejected", "replaced"}
 ACTIVE = {"new", "accepted", "pending_new", "partially_filled", "pending_cancel", "pending_replace",
@@ -32,17 +34,30 @@ def whole(value):
 
 class PaperSession:
     def __init__(self, config, provider, *, journal=None, snapshot_builder=None, clock=None,
-                 expected_account_id=None):
+                 expected_account_id=None, execution_guard=None, entry_guard=None, advisor=None):
         self.config = config
         self.provider = provider
         self.journal = journal or Journal(config.db_path)
         self.builder = snapshot_builder or SnapshotBuilder(provider, config)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
-        self.strategy = StrategyConfig(**config.strategy_overrides)
+        self.strategy = load_strategy(config.strategy_overrides)
         self.risk = RiskManager(RiskConfig(**config.risk_overrides))
         self.lease = WorkerLease(config.db_path)
         self._owner = False
         self.expected_account_id = expected_account_id
+        self.execution_guard = execution_guard or (lambda: True)
+        self.entry_guard = entry_guard or (lambda: True)
+        # Optional Gemini chart reader (AI_ADVISOR.md). Inactive unless both
+        # AI_ADVISOR_ENABLED and AI_ADVISOR_MODE say so; it never sizes orders.
+        # Env-built advisors may run cotrade only when the reviewed config covers it.
+        self._cotrade_reviewed = advisor is not None or bool(getattr(config, "ai_cotrade", None))
+        if advisor is None:
+            try:
+                from pathlib import Path
+                advisor = AIAdvisor.from_env(default_log_dir=str(Path(config.db_path).parent / "ai_advisor"))
+            except Exception:
+                advisor = None
+        self.advisor = advisor
 
     def __enter__(self):
         self.lease.__enter__()
@@ -59,7 +74,71 @@ class PaperSession:
 
     def __exit__(self, *args):
         self._owner = False
+        if self.advisor is not None:
+            try:
+                self.advisor.close()
+            except Exception:
+                pass
         self.lease.__exit__(*args)
+
+    def _active_advisor(self):
+        advisor = self.advisor
+        try:
+            return advisor if advisor is not None and advisor.enabled else None
+        except Exception:
+            return None
+
+    def _ai_start_reads(self, ai, by_symbol):
+        """Queue background chart reads; returns at once so the rules never wait."""
+        try:
+            items = []
+            chart_bars = getattr(self.builder, "chart_bars", None)
+            for symbol, snapshot in by_symbol.items():
+                if not self._ai_read_window(snapshot):
+                    continue   # no free-tier calls outside the rules' entry window
+                bars = None
+                if callable(chart_bars):
+                    try:
+                        bars = chart_bars(symbol)
+                    except Exception:
+                        bars = None
+                quote = snapshot.get("quote") or {}
+                items.append((symbol, bars or snapshot.get("bars") or (),
+                              {"bid": quote.get("bid"), "ask": quote.get("ask"), "as_of": snapshot.get("now")}))
+            ai.start_reads(items)
+            ai.wait()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _ai_safe(call, default=None):
+        """Advisor bugs must never break a cycle; the rules path carries on."""
+        try:
+            return call()
+        except Exception:
+            return default
+
+    def _ai_read_window(self, snapshot):
+        try:
+            from datetime import time as clock_time
+            local = parse_time(snapshot.get("now")).astimezone(NY)
+            session = snapshot.get("session") or {}
+            return (session.get("is_trading_day") is True
+                    and clock_time.fromisoformat(self.strategy.trade_start_et) <= local.time()
+                    < clock_time.fromisoformat(self.strategy.trade_end_et))
+        except Exception:
+            return False
+
+    def _ai_signal(self, ai, symbol):
+        try:
+            return ai.signal(symbol) if ai is not None else None
+        except Exception:
+            return None
+
+    def _cancel_allowed(self):
+        # Emergency halt must still permit protective cancellation; process
+        # shutdown or loss of this session's ownership must not.
+        return self._owner and self.execution_guard() is True
 
     def _reconcile(self, run_id, now):
         requests = self.journal.events(event_type="paper_order_requested")
@@ -181,14 +260,17 @@ class PaperSession:
                 "account_received_at": account_received_at.isoformat(), "evidence_collected_at": self.clock().isoformat(),
                 "errors": sorted(set(errors)), "reconciled": not errors}
 
-    def cycle(self, *, snapshots=None, session_ledger=None, execute=False):
+    def cycle(self, *, snapshots=None, session_ledger=None, execute=False, allow_entries=True):
         """Run once with fresh provider evidence. `execute` defaults False.
 
         session_ledger must contain complete=True, session_date, as_of,
         realized_pnl (gross), fees, source. Never obtain these by interpreting an
-        account equity change as realized trading P&L. No order is placed by the
-        shipped HTTP service; integrations must explicitly call this component.
+        account equity change as realized trading P&L. The separately started
+        autopilot service calls this component after durable authorization.
         """
+        # Pausing entries must keep reconciliation and protective exits running.
+        if type(allow_entries) is not bool or type(execute) is not bool:
+            raise ValueError("Execution flags must be booleans")
         if not self._owner:
             raise PaperDisabled("PaperSession must own its persistent journal lease")
         if self.config.mode != "paper":
@@ -250,37 +332,77 @@ class PaperSession:
             control = self.journal.kill_switch()
 
             def checkpoint(label):
-                self.journal.append("paper-state", "paper_risk_state", {"state": self.risk.to_state()},
-                                    key=f"risk-state:{cycle_id}:{label}", timestamp=self.clock().isoformat())
+                (self.journal.append_sampled if not execute else self.journal.append)(
+                    "paper-state", "paper_risk_state", {"state": self.risk.to_state()},
+                    key=f"risk-state:{cycle_id}:{label}", timestamp=self.clock().isoformat())
 
             # Account loss/stop latches do not depend on an entry or usable quote.
             watchdog_quote = next(iter(by_symbol.values()))["quote"] if by_symbol else {}
             watchdog = self.risk.assess(None, account, watchdog_quote, now, connected=True,
                                        reconciled=reconciled and bool(by_symbol),
                                        kill_switch=bool(control.get("flatten_requested")),
-                                       halt_new_entries=bool(control.get("enabled") and not control.get("flatten_requested")))
+                                       halt_new_entries=not allow_entries or bool(control.get("enabled") and not control.get("flatten_requested")))
             checkpoint("watchdog")
             for order in evidence["opening"]:
                 submitted = parse_time(order.get("submitted_at") or evidence["known"][order["client_order_id"]]["intent"]["observed_at"])
-                if control.get("enabled") or watchdog.metrics.get("cancel_entries_required") or (now-submitted).total_seconds() >= self.config.order_ttl_seconds:
+                if not allow_entries or control.get("enabled") or watchdog.metrics.get("cancel_entries_required") or (now-submitted).total_seconds() >= self.config.order_ttl_seconds:
                     actions.append({"kind": "cancel_opening_remainder", "order_id": order["id"], "confirmed": False})
-                    if execute and evidence["reconciled"]:
-                        self.provider.cancel(order, self.journal, run_id)
+                    if execute and evidence["reconciled"] and self.execution_guard() is True:
+                        self.provider.cancel(order, self.journal, run_id, guard=self._cancel_allowed)
 
             def guard(side):
+                if self.execution_guard() is not True:
+                    raise PaperDisabled("Execution service is stopping")
+                if not self._owner or self.config.paper_blockers():
+                    raise PaperDisabled("Paper execution configuration or ownership is not approved")
+                if side == "buy" and self.entry_guard() is not True:
+                    raise PaperDisabled("Customer settings no longer authorize new entries")
+                # The settings read can block. Recheck local authority and
+                # time-sensitive evidence only after it has completed.
+                latest_control = self.journal.kill_switch()
+                now = self.clock()
+                if self.execution_guard() is not True:
+                    raise PaperDisabled("Execution service is stopping")
                 if not self._owner or self.config.paper_blockers():
                     raise PaperDisabled("Paper execution configuration or ownership is not approved")
                 if not reconciled:
                     raise PaperDisabled("Complete current account/order/position/fee reconciliation required")
-                if (self.clock()-parse_time(evidence["as_of"])).total_seconds() > 5:
+                if not 0 <= (now-parse_time(evidence["as_of"])).total_seconds() <= 5:
                     raise PaperDisabled("Account reconciliation stale before submission")
-                if not ledger_valid or not 0 <= (self.clock()-parse_time(ledger["as_of"])).total_seconds() <= 5:
+                if not ledger_valid or not 0 <= (now-parse_time(ledger["as_of"])).total_seconds() <= 5:
                     raise PaperDisabled("Session P&L/fee ledger stale before submission")
-                if self.clock().astimezone(NY).date().isoformat() != day:
+                if now.astimezone(NY).date().isoformat() != day:
                     raise PaperDisabled("Session changed before submission")
-                latest_control = self.journal.kill_switch()
-                if side == "buy" and (latest_control.get("enabled") or self.risk.locked):
+                if side == "buy" and (not allow_entries or latest_control.get("enabled") or self.risk.locked):
                     raise PaperDisabled("New entries are durably halted")
+
+            ai = self._active_advisor()
+            cotrade = (ai is not None and self._ai_safe(lambda: ai.mode) == "cotrade"
+                       and self._cotrade_reviewed)
+            entry_candidates = []
+            if ai is not None:
+                self._ai_start_reads(ai, by_symbol)
+
+            def entry_flags():
+                return dict(connected=True, reconciled=reconciled,
+                            kill_switch=bool(control.get("flatten_requested")),
+                            halt_new_entries=not allow_entries or bool(control.get("enabled") and not control.get("flatten_requested")))
+
+            def submit_entry(checked, snapshot, extra=None):
+                action = {"kind": "paper_entry_intent", "intent": checked.intent, "submitted": False, "filled_qty": 0}
+                if extra:
+                    action.update(extra)
+                if execute:
+                    guard("buy")
+                    self.provider.submit(checked.intent, self.journal, run_id, quote=snapshot["quote"], guard=lambda: guard("buy"))
+                    # Reserve acknowledged/uncertain opening quantity before considering another symbol.
+                    account["open_order_qty"] += checked.intent["qty"]
+                    action["submitted"] = True
+                else:
+                    # A dry run also proposes at most one allocation per cycle.
+                    account["open_order_qty"] += checked.intent["qty"]
+                actions.append(action)
+                return action
 
             # The risk watchdog runs even if no symbol produces an entry.
             for symbol, snapshot in by_symbol.items():
@@ -288,21 +410,24 @@ class PaperSession:
                 checked = self.risk.assess(setup.intent if setup.accepted else None, account, snapshot["quote"], now,
                                           connected=True, reconciled=reconciled,
                                           kill_switch=bool(control.get("flatten_requested")),
-                                          halt_new_entries=bool(control.get("enabled") and not control.get("flatten_requested")))
+                                          halt_new_entries=not allow_entries or bool(control.get("enabled") and not control.get("flatten_requested")))
                 checkpoint("decision-"+symbol)
                 position = next((p for p in evidence["positions"] if p["symbol"] == symbol), None)
                 exit_decision = evaluate_exit(position, snapshot, self.strategy,
                                              force_reason=checked.reasons[0] if checked.metrics.get("flatten_required") else None) if position else None
                 decisions.append({"symbol": symbol, "strategy": setup.to_dict(), "risk": checked.to_dict(),
                                   "exit": exit_decision.to_dict() if exit_decision else None})
+                signal = self._ai_signal(ai, symbol)
+                if ai is not None:
+                    decisions[-1]["ai_signal"] = self._ai_safe(lambda: signal.to_dict()) if signal is not None else None
                 need_cancel_entries = bool(checked.metrics.get("cancel_entries_required") or (exit_decision and exit_decision.accepted))
                 for order in evidence["opening"]:
                     submitted = parse_time(order.get("submitted_at") or evidence["known"][order["client_order_id"]]["intent"]["observed_at"])
                     expired = (now-submitted).total_seconds() >= self.config.order_ttl_seconds
                     if (need_cancel_entries or expired) and not any(a.get("order_id") == order["id"] for a in actions):
                         actions.append({"kind": "cancel_opening_remainder", "order_id": order["id"], "confirmed": False})
-                        if execute and evidence["reconciled"]:
-                            self.provider.cancel(order, self.journal, run_id)
+                        if execute and evidence["reconciled"] and self.execution_guard() is True:
+                            self.provider.cancel(order, self.journal, run_id, guard=self._cancel_allowed)
                 if exit_decision and exit_decision.accepted:
                     if evidence["opening"]:
                         actions.append({"kind": "exit_waiting_for_opening_order_reconciliation", "symbol": symbol})
@@ -313,8 +438,8 @@ class PaperSession:
                             submitted = parse_time(order.get("submitted_at") or now)
                             if (now-submitted).total_seconds() >= self.config.order_ttl_seconds:
                                 actions.append({"kind": "cancel_stale_exit", "order_id": order["id"], "confirmed": False})
-                                if execute and evidence["reconciled"]:
-                                    self.provider.cancel(order, self.journal, run_id)
+                                if execute and evidence["reconciled"] and self.execution_guard() is True:
+                                    self.provider.cancel(order, self.journal, run_id, guard=self._cancel_allowed)
                         actions.append({"kind": "exit_pending_fill_or_cancel_confirmation", "symbol": symbol})
                         continue
                     completed_exits = [o for cid, o in evidence["orders"].items()
@@ -324,23 +449,69 @@ class PaperSession:
                               "exit_generation": str(len(completed_exits))}
                     action = {"kind": "paper_exit_intent", "intent": intent, "submitted": False,
                               "positions_confirmed_flat": False}
+                    if ai is not None:
+                        try:
+                            ai.record_outcome(position, intent)
+                        except Exception:
+                            pass
                     if execute:
                         guard("sell")
                         self.provider.submit(intent, self.journal, run_id, quote=snapshot["quote"], guard=lambda: guard("sell"))
                         action["submitted"] = True
                     actions.append(action)
-                elif not position and checked.accepted and not evidence["closing"]:
-                    action = {"kind": "paper_entry_intent", "intent": checked.intent, "submitted": False, "filled_qty": 0}
-                    if execute:
-                        guard("buy")
-                        self.provider.submit(checked.intent, self.journal, run_id, quote=snapshot["quote"], guard=lambda: guard("buy"))
-                        # Reserve acknowledged/uncertain opening quantity before considering another symbol.
-                        account["open_order_qty"] += checked.intent["qty"]
-                        action["submitted"] = True
-                    else:
-                        # A dry run also proposes at most one allocation per cycle.
-                        account["open_order_qty"] += checked.intent["qty"]
-                    actions.append(action)
+                elif allow_entries and not position and checked.accepted and not evidence["closing"] and not cotrade:
+                    # Rules decide alone (advisor off or advise mode: AI calls are only tagged and logged).
+                    tag = (self._ai_safe(lambda: {"source": ai.classify(True, signal),
+                                                  "ai_signal": signal.to_dict() if signal else None},
+                                         {"source": "rules", "ai_signal": None})
+                           if ai is not None else None)
+                    action = submit_entry(checked, snapshot, tag)
+                    if ai is not None:
+                        self._ai_safe(lambda: ai.note_candidate(action["source"], checked.intent, signal,
+                                                                submitted=action["submitted"], outcome="entry_intent"))
+                elif allow_entries and not position and not evidence["closing"]:
+                    if ai is not None and not cotrade and not checked.accepted:
+                        # advise mode: record what an AI-only candidate would have been; never trade it.
+                        if self._ai_safe(lambda: ai.classify(False, signal)) == "ai":
+                            ai_intent, _why = build_ai_intent(snapshot, self.strategy, signal, self.config.watchlist,
+                                                              min_reward_r=self.risk.config.min_reward_r)
+                            if ai_intent is not None:
+                                self._ai_safe(lambda: ai.note_candidate("ai", ai_intent, signal, submitted=False,
+                                                                        outcome="advise_only_not_traded"))
+                    elif cotrade:
+                        # Rules and AI run side by side; the combiner tags and queues candidates and
+                        # every one is re-checked by the same risk manager below before submission.
+                        source = self._ai_safe(lambda: ai.classify(checked.accepted, signal))
+                        if source is None and checked.accepted:
+                            source = "rules"   # an advisor fault never drops a rules candidate
+                        if source in ("confluence", "rules"):
+                            entry_candidates.append((PRIORITY[source], len(entry_candidates), source, symbol,
+                                                     setup.intent, snapshot, signal))
+                        elif source == "ai":
+                            ai_intent, why = build_ai_intent(snapshot, self.strategy, signal, self.config.watchlist,
+                                                             min_reward_r=self.risk.config.min_reward_r)
+                            if ai_intent is not None:
+                                entry_candidates.append((PRIORITY["ai"], len(entry_candidates), "ai", symbol,
+                                                         ai_intent, snapshot, signal))
+                            else:
+                                decisions[-1]["ai_candidate_rejected"] = why
+            # cotrade: confluence first, then rule-only, then AI-only. Each is sized and
+            # limited by the unchanged RiskManager against the current account state.
+            for _priority, _order, source, symbol, raw_intent, snapshot, signal in sorted(entry_candidates, key=lambda c: c[:2]):
+                checked = self.risk.assess(raw_intent, account, snapshot["quote"], now, **entry_flags())
+                if not checked.accepted:
+                    actions.append({"kind": "entry_candidate_rejected_by_risk", "symbol": symbol, "source": source,
+                                    "reasons": list(checked.reasons)})
+                    continue
+                limit = self._ai_safe(lambda: ai.wants_ai_entry(signal), "ai_advisor_error") if source == "ai" else None
+                if limit is not None:
+                    actions.append({"kind": "entry_candidate_rejected_by_ai_limits", "symbol": symbol, "source": source,
+                                    "reasons": [limit]})
+                    continue
+                action = submit_entry(checked, snapshot, {"source": source, "ai_signal": self._ai_safe(
+                    lambda: signal.to_dict()) if signal else None})
+                self._ai_safe(lambda: ai.note_candidate(source, checked.intent, signal,
+                                                        submitted=action["submitted"], outcome="entry_intent"))
             if not by_symbol:
                 errors.append("no_current_snapshots")
             result = {"mode": "paper", "provenance": "provider_observations", "run_id": run_id,
@@ -352,7 +523,7 @@ class PaperSession:
                           and evidence["account"].get("account_blocked") is False
                           and not evidence["account"].get("trade_suspended_by_user", False)
                           and "paper_account_identity_mismatch" not in evidence["errors"]),
-                      "reconciled": not errors, "execute_requested": execute,
+                      "reconciled": not errors, "execute_requested": execute, "entries_enabled": allow_entries,
                       "execution_configured": not self.config.paper_blockers(),
                       "errors": sorted(set(errors)), "account": account, "positions": evidence["positions"],
                       "broker_positions": evidence["actual_positions"],
@@ -369,9 +540,12 @@ class PaperSession:
                       "reconciled": False, "execute_requested": execute, "actions": actions, "decisions": decisions,
                       "errors": sorted(set(errors+[type(exc).__name__])),
                       "positions_confirmed_flat": False, "live_execution_supported": False}
-        self.journal.append("paper-state", "paper_risk_state", {"state": self.risk.to_state()},
-                            key="risk-state:"+cycle_id, timestamp=self.clock().isoformat())
-        self.journal.append(run_id, "paper_cycle", plain(result), key="paper-cycle:"+cycle_id,
-                            timestamp=self.clock().isoformat())
+        write = self.journal.append_sampled if not execute else self.journal.append
+        write("paper-state", "paper_risk_state", {"state": self.risk.to_state()},
+              key="risk-state:"+cycle_id, timestamp=self.clock().isoformat())
+        write(run_id, "paper_cycle", plain(result), key="paper-cycle:"+cycle_id,
+              timestamp=self.clock().isoformat(),
+              **({"signature": canonical_json(plain([result.get("connected"), result.get("reconciled"),
+                                               result.get("errors"), result.get("actions")]))}
+                 if not execute else {}))
         return plain(result)
-

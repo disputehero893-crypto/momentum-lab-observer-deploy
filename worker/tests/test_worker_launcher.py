@@ -18,13 +18,15 @@ class LauncherTests(unittest.TestCase):
             # cannot chown to the container UID; disk ownership and privilege
             # dropping need a real container test. The stub is child-only.
             Path(directory, "sitecustomize.py").write_text(
+                "from offline_network import install_process_guard\n"
+                "install_process_guard()\n"
                 "import os\nos.geteuid = lambda: 10001\n", encoding="utf-8",
             )
             # No inherited broker/cloud credentials or runtime configuration.
             env = {
                 "PATH": str(Path(sys.executable).parent) + os.pathsep + os.defpath,
                 "PYTHONDONTWRITEBYTECODE": "1",
-                "PYTHONPATH": directory,
+                "PYTHONPATH": os.pathsep.join((directory, str(WORKER_ROOT / "tests"))),
                 "MOMENTUM_MODE": "paper",
                 "PAPER_TRADING_ENABLED": "false",
                 "JOURNAL_PATH": str(Path(directory) / "data" / "journal.sqlite3"),

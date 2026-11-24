@@ -11,13 +11,26 @@ from .journal import Journal, canonical_json
 
 
 class Application:
-    def __init__(self, config, *, observation_worker=None):
+    def __init__(self, config, *, observation_worker=None, autopilot=None, customer_gateway=None):
         self.config = config
         self.journal = Journal(config.db_path)
         self.mutation_lock = threading.Lock()
         self.observation_worker = observation_worker
+        self.autopilot = autopilot
+        if customer_gateway is not None and (customer_gateway.worker is not autopilot
+                or customer_gateway.origin != config.cors_origin):
+            raise ValueError("customer_gateway_application_mismatch")
+        self.customer_gateway = customer_gateway
 
     def readiness(self):
+        if self.autopilot is not None:
+            state = self.autopilot.state()
+            return {"mode": "paper", "runtime": "autopilot", "state": state["state"],
+                    "configuration": self.config.public(),
+                    "paper_execution_running": bool(state.get("execution_enabled")),
+                    "entries_enabled": bool(state.get("entries_enabled")),
+                    "live_execution_supported": False,
+                    "launch_blockers": state.get("blockers", ["initial_reconciliation_pending"])}
         observed = self.observation_worker.state() if self.observation_worker else None
         latest = observed.get("latest_cycle") if observed else None
         return {"mode": self.config.mode, "demo_ready": True,
@@ -43,6 +56,8 @@ class Application:
         return event["payload"] if event else None
 
     def state(self):
+        if self.autopilot is not None:
+            return {"readiness": self.readiness(), "autopilot": self.autopilot.state()}
         completed = self.journal.latest("demo_run_completed")
         return {"readiness": self.readiness(), "latest_demo": completed["payload"] if completed else None,
                 "paper_state": self.observation_worker.state() if self.observation_worker else None,
@@ -94,7 +109,53 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
                 return False
             return True
 
+        def customer_request(self, method):
+            # Customer JWTs never enter the shared operator-token authentication path.
+            from .customer_gateway import MAX_BODY, GatewayError, header
+            gateway = app.customer_gateway
+            if gateway is None:
+                self.send(503, {"error": "customer_gateway_not_configured"})
+                return
+            try:
+                if header(self.headers, "Transfer-Encoding") is not None:
+                    raise GatewayError("transfer_encoding_not_supported")
+                size = header(self.headers, "Content-Length")
+                if size is not None and (not size.isascii() or not size.isdigit() or len(size) > 8):
+                    raise GatewayError("invalid_content_length")
+                length = int(size or "0")
+                if length > MAX_BODY:
+                    raise GatewayError("invalid_or_oversized_body", 413)
+                if hasattr(self.connection, "settimeout"):
+                    self.connection.settimeout(5)
+                body = self.rfile.read(length) if length else b""
+                if len(body) != length:
+                    raise GatewayError("incomplete_body")
+                status, result = gateway.handle(method, self.path, self.headers, body)
+                self.send(status, result)
+            except GatewayError as exc:
+                self.send(exc.status, {"error": exc.code})
+            except (OSError, ValueError):
+                self.send(400, {"error": "invalid_customer_request"})
+
         def do_OPTIONS(self):
+            if self.path.startswith("/v1/"):
+                if app.customer_gateway is None:
+                    self.send(503, {"error": "customer_gateway_not_configured"})
+                    return
+                status, result = app.customer_gateway.preflight(self.path, self.headers)
+                if status != 204:
+                    self.send(status, result)
+                    return
+                self.send_response(204)
+                self.send_header("Access-Control-Allow-Origin", config.cors_origin)
+                self.send_header("Vary", "Origin")
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-TactiRise-API-Version, X-TactiRise-Request-ID")
+                self.send_header("Access-Control-Max-Age", "600")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             # Browser preflight contains no bearer token and reveals no private data.
             if not self.path.startswith("/api/") or not config.cors_origin or self.headers.get("Origin") != config.cors_origin:
                 self.send(403, {"error": "origin_not_allowed"})
@@ -109,6 +170,9 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
             self.end_headers()
 
         def do_GET(self):
+            if self.path.startswith("/v1/"):
+                self.customer_request("GET")
+                return
             parsed = urlsplit(self.path)
             path = unquote(parsed.path)
             if path == "/health":
@@ -116,7 +180,12 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
                 return
             if not self.authorized():
                 return
-            if path == "/api/readiness":
+            if path == "/api/autopilot/state":
+                if app.autopilot is None:
+                    self.send(503, {"error": "autopilot_service_not_configured"})
+                else:
+                    self.send(200, app.autopilot.state())
+            elif path == "/api/readiness":
                 self.send(200, app.readiness())
             elif path == "/api/state":
                 self.send(200, app.state())
@@ -147,6 +216,9 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
                 self.send(404, {"error": "not_found"})
 
         def do_POST(self):
+            if self.path.startswith("/v1/"):
+                self.customer_request("POST")
+                return
             if not self.authorized():
                 return
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
@@ -166,7 +238,16 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
             path = urlsplit(self.path).path
             try:
                 with app.mutation_lock:
-                    if path == "/api/demo/run":
+                    if path == "/api/autopilot/commands":
+                        if app.autopilot is None:
+                            self.send(503, {"error": "autopilot_service_not_configured"})
+                        elif set(payload) != {"owner_id", "action", "configuration_version", "request_id", "consent"}:
+                            self.send(400, {"error": "invalid_command_fields"})
+                        else:
+                            self.send(202, app.autopilot.command(**payload))
+                    elif path == "/api/demo/run" and app.autopilot is not None:
+                        self.send(409, {"error": "demo_unavailable_on_execution_service"})
+                    elif path == "/api/demo/run":
                         run_id = payload.get("run_id", "demo-" + uuid.uuid4().hex[:16])
                         if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):
                             raise ValueError("invalid_run_id")
@@ -197,4 +278,3 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
     server.daemon_threads = True
     server.app = app
     return server
-

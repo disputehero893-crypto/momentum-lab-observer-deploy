@@ -14,8 +14,9 @@ from momentum.config import Config, ConfigError
 from momentum.journal import Journal
 from momentum.lease import AlreadyRunning, WorkerLease
 from momentum.ledger import AccountingLedger
-from momentum.observation import ObservationError, ObservationWorker, ReadOnlyPaperClient
+from momentum.observation import ObservationError, ReadOnlyPaperClient
 from momentum.publisher import Publisher
+from observer_fixtures import offline_observation_worker
 from momentum.server import Application
 from worker_fakes import FakeVenue, armed_config
 
@@ -82,7 +83,7 @@ class Fixture:
         return [snapshot]
 
     def worker(self, **kwargs):
-        return ObservationWorker(self.config, provider=self.client, snapshot_builder=self,
+        return offline_observation_worker(self.config, provider=self.client, snapshot_builder=self,
             publisher=self.cloud, clock=lambda: self.venue.now, **kwargs)
 
 
@@ -308,7 +309,7 @@ class ObservationTests(unittest.TestCase):
                     return [deepcopy(payload)]
                 raise AssertionError("Unexpected invented cloud operation")
             publisher = Publisher(fixture.config, transport=cloud, clock=lambda: fixture.venue.now)
-            with ObservationWorker(fixture.config, provider=fixture.client, snapshot_builder=fixture,
+            with offline_observation_worker(fixture.config, provider=fixture.client, snapshot_builder=fixture,
                     publisher=publisher, clock=lambda: fixture.venue.now) as worker:
                 result = worker.cycle()
                 self.assertTrue(result["cloud_state_published"], result)

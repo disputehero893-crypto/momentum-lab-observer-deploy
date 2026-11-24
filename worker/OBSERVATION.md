@@ -1,6 +1,14 @@
 # Observation worker: implementation and deployment handoff
 
-This milestone adds a continuous **GET-only Alpaca Paper observer**, durable activity accounting, and worker status/halts for the existing dashboard. The original implementation passed offline tests with invented, injected provider responses. The dedicated Render service is live with its persistent disk. Initial hosted checks verified public liveness, private-request authentication enforcement, fresh Paper account observation and advancing owner-bound cloud status with execution disabled. The implemented [Market Watch](MARKET_WATCH.md) increment adds quote-only observation of the approved AAPL, MSFT and SPY connection-test watchlist on IEX. Closed-session delivery is now separately verified: the three IEX rows reached the correct owner with advancing receipt/heartbeat times and unchanged Friday source times correctly marked stale. Active-session data behavior, signed-in Market Watch rendering, financial completeness and the remaining operational acceptance are open. See [DEPLOYMENT_STATUS.md](DEPLOYMENT_STATUS.md) for actual hosted evidence and source/deploy IDs.
+This milestone adds a continuous **GET-only Alpaca Paper observer**, durable activity accounting, and worker status/halts for the existing dashboard. The original implementation passed offline tests with invented, injected provider responses. The dedicated Render service was originally verified live with its persistent disk. Initial hosted checks verified public liveness, private-request authentication enforcement, fresh Paper account observation and advancing owner-bound cloud status with execution disabled. The implemented [Market Watch](MARKET_WATCH.md) increment adds quote-only observation of the approved AAPL, MSFT and SPY connection-test watchlist on IEX. Closed-session delivery is now separately verified: the three IEX rows reached the correct owner with advancing receipt/heartbeat times and unchanged Friday source times correctly marked stale. Active-session data behavior, signed-in Market Watch rendering, financial completeness and the remaining operational acceptance are open. See [DEPLOYMENT_STATUS.md](DEPLOYMENT_STATUS.md) for actual hosted evidence and source/deploy IDs.
+
+
+
+Current read-only Render state was rechecked on 2026-11-15: the service is
+suspended with `stuck_crashlooping`; the last recorded deployment is the older
+2026-10-19 runtime, and no new deployment has been performed from this draft.
+The available crash-window log query returned no rows, so the specific cause
+remains unverified. See `DEPLOYMENT_STATUS.md` for the evidence boundary.
 
 The saved app connection was independently verified earlier: ACTIVE paper account, no blocking flags, at 2026-10-18T18:29:09.706582Z. That result is recorded in `../docs/account-link-acceptance.json`. It does not provision this worker or establish market-data connectivity.
 
@@ -52,7 +60,7 @@ The worker does not load `.env` automatically. Provision values in the host's en
 | `WORKER_CONTROL_TOKEN` | Independent private-HTTP bearer secret. The Blueprint requests platform generation; verify the hosted private-API configuration without exposing the value. |
 | `JOURNAL_PATH` | `/var/data/momentum.sqlite3` on the persistent disk. |
 | `ALPACA_DATA_FEED` | `iex` by default; an entitlement failure never causes a silent feed switch. |
-| `WATCHLIST` | At most ten explicit symbols. The approved connection-test selection is `AAPL,MSFT,SPY` on IEX; it does not select daily momentum candidates. |
+| `WATCHLIST` | At most ten explicit symbols. The approved connection-test selection is `AAPL,MSFT,SPY` on IEX; an omitted or empty value defaults to that list. It does not select daily momentum candidates. |
 | `SYMBOL_METADATA_PATH` | Optional operator-maintained point-in-time float/catalyst facts for strategy evaluation. Not required by the default quote-only Market Watch path; missing facts remain missing. |
 | `POLL_SECONDS` | Five seconds by default; not a guarantee of cycle or halt latency. Quotes may age beyond their independent two-second freshness limit between polls. |
 | `ACCOUNTING_HISTORY_START` | Explicit, timezone-qualified history anchor. Still blank for this increment: import is skipped and accounting remains incomplete. |
@@ -157,3 +165,37 @@ The Market Watch implementation passed a separate set of **51 focused tests**: *
 - [Render disk/workspace price source](https://render.com/articles/how-much-does-cloud-application-hosting-cost-for-small-businesses)
 - [Render Blueprint fields](https://render.com/docs/blueprint-spec)
 - [Render persistent-disk behavior](https://render.com/docs/disks)
+
+## Journal growth and low-disk guard
+
+The observation worker used to persist four events per cycle (`paper_observation_cycle`,
+two `paper_risk_state`, `paper_cycle`). A local fake-venue measurement estimated about
+128 MB/day at `POLL_SECONDS=5`, implying roughly eight days to fill a 1 GB
+`/var/data` disk under those conditions. This was a projection, not a measurement of
+production disk growth. Current read-only Render checks confirm the service is suspended
+with `stuck_crashlooping`, but the queried crash-window logs and disk events returned no
+rows. Disk-full is therefore not established as the cause of the crash loop.
+
+Observation telemetry is now sampled:
+
+- `JOURNAL_SAMPLE_SECONDS` (default `60`, `0` = write every cycle): an unchanged cycle is
+  persisted at most once per window. A change in blockers, error code, halt state, broker/data
+  verification, publication state, acknowledged commands, or session errors/actions is
+  persisted immediately. Expected growth is about 11 MB/day.
+- `JOURNAL_MIN_FREE_MB` (default `64`, `0` = off): below this free space, telemetry is skipped
+  (with a warning) instead of crashing the worker. Kill-switch, account-binding, idempotent
+  order, and trade events always use the strict `append()` path.
+- Sampling applies only when `execute=False` (the observation runtime). Paper execution paths
+  keep writing every event.
+- `observation_stopped` no longer masks the original error with a second traceback.
+
+
+Startup failure handling also covers journal directory creation and SQLite open/WAL/schema
+initialization, before the observation worker can append its startup record. ENOSPC and
+known full-volume SQLite failures are reported as the stable
+`journal_volume_full_grow_the_disk_or_free_space` diagnostic; the ambiguous SQLite
+`disk I/O error` is mapped only when free space is below the configured threshold. Other
+SQLite errors propagate unchanged. This is diagnostic fail-closed behavior: it does not
+delete, truncate, recreate, or repair the persistent journal. A full disk still needs an
+operator-approved capacity/free-space correction before restart, while preserving the
+existing journal and verifying its backup.

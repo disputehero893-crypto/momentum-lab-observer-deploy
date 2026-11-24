@@ -12,8 +12,31 @@ PAPER_API_HOST = "https://paper-api.alpaca.markets"
 DATA_API_HOST = "https://data.alpaca.markets"
 SYMBOL = re.compile(r"^[A-Z][A-Z0-9.-]{0,9}$")
 
+def _strategy(overrides):
+    from .strategy import load_strategy
+    return load_strategy(overrides)
+
+def _watchlist(raw):
+    """Empty or omitted WATCHLIST agrees with the liquid IEX preset universe."""
+    from .presets import LIQUID_IEX_UNIVERSE
+    symbols = tuple(dict.fromkeys(part.strip().upper() for part in str(raw).split(",") if part.strip()))
+    return symbols or LIQUID_IEX_UNIVERSE
+
 class ConfigError(ValueError):
     pass
+
+def _ai_cotrade(env):
+    """Trading-relevant AI settings, only when AI-only paper entries are switched on."""
+    from .ai_advisor import AdvisorConfig, AdvisorConfigError
+    try:
+        ai = AdvisorConfig.from_env(env)
+    except AdvisorConfigError:
+        return {}  # the advisor turns itself off on invalid settings
+    if not (ai.active and ai.mode == "cotrade"):
+        return {}
+    return {"mode": ai.mode, "model": ai.model, "min_confidence": ai.min_confidence,
+            "confluence_min_confidence": ai.confluence_min_confidence,
+            "max_trades_per_day": ai.max_trades_per_day, "signal_max_age_seconds": ai.signal_max_age_seconds}
 
 def flag(value, name):
     if value is None or value == "":
@@ -39,6 +62,8 @@ class Config:
     host: str = "127.0.0.1"
     port: int = 8787
     poll_seconds: float = 5.0
+    journal_sample_seconds: float = 60.0
+    journal_min_free_mb: int = 64
     quote_max_age_seconds: float = 2.0
     order_ttl_seconds: float = 15.0
     demo_equity: str = "10000"
@@ -51,6 +76,9 @@ class Config:
     accounting_history_start: str = ""
     accounting_baseline_path: str = ""
     accounting_cost_policy: str = "actual"
+    # Non-empty only when the optional AI advisor runs in cotrade mode; then it is
+    # part of review_hash(), so AI-only paper entries need an explicit re-review.
+    ai_cotrade: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.mode not in {"demo", "paper"}:
@@ -70,6 +98,10 @@ class Config:
                 raise ConfigError("CRYPTO_WATCHLIST must contain 1-10 unique uppercase USD crypto pairs") from exc
         if not 1 <= self.port <= 65535:
             raise ConfigError("PORT must be between 1 and 65535")
+        if not 0 <= self.journal_sample_seconds <= 3600:
+            raise ConfigError("JOURNAL_SAMPLE_SECONDS must be between 0 and 3600")
+        if not 0 <= self.journal_min_free_mb <= 10240:
+            raise ConfigError("JOURNAL_MIN_FREE_MB must be between 0 and 10240")
         if not 1 <= self.poll_seconds <= 300:
             raise ConfigError("POLL_SECONDS must be between 1 and 300")
         if not 0 < self.quote_max_age_seconds <= 5:
@@ -92,9 +124,8 @@ class Config:
         if self.accounting_baseline_path and not self.accounting_history_start:
             raise ConfigError("An accounting baseline requires ACCOUNTING_HISTORY_START")
         try:
-            from .strategy import StrategyConfig
             from .risk import RiskConfig
-            StrategyConfig(**self.strategy_overrides)
+            _strategy(self.strategy_overrides)
             RiskConfig(**self.risk_overrides)
         except (ValueError, TypeError, ArithmeticError) as exc:
             raise ConfigError("Invalid or unsupported strategy/risk configuration") from exc
@@ -123,13 +154,15 @@ class Config:
                 api_key=env.get("ALPACA_API_KEY", ""), api_secret=env.get("ALPACA_SECRET_KEY", ""),
                 control_token=env.get("WORKER_CONTROL_TOKEN", ""),
                 data_feed=env.get("ALPACA_DATA_FEED", "iex"),
-                watchlist=tuple(dict.fromkeys(s.strip().upper() for s in env.get("WATCHLIST", "").split(",") if s.strip())),
+                watchlist=_watchlist(env.get("WATCHLIST", "")),
                 crypto_watchlist=tuple(s.strip().upper() for s in env.get("CRYPTO_WATCHLIST", "").split(",") if s.strip()),
                 db_path=env.get("JOURNAL_PATH", "./data/momentum.sqlite3"),
                 export_dir=env.get("EXPORT_DIR", "./exports"),
                 metadata_path=env.get("SYMBOL_METADATA_PATH", "./symbol_metadata.json"),
                 host=env.get("HOST", "127.0.0.1"), port=int(env.get("PORT", "8787")),
                 poll_seconds=float(env.get("POLL_SECONDS", "5")),
+                journal_sample_seconds=float(env.get("JOURNAL_SAMPLE_SECONDS", "60")),
+                journal_min_free_mb=int(env.get("JOURNAL_MIN_FREE_MB", "64")),
                 quote_max_age_seconds=float(env.get("QUOTE_MAX_AGE_SECONDS", "2")),
                 order_ttl_seconds=float(env.get("ORDER_TTL_SECONDS", "15")),
                 demo_equity=env.get("DEMO_EQUITY", "10000"),
@@ -141,6 +174,7 @@ class Config:
                 accounting_history_start=env.get("ACCOUNTING_HISTORY_START", ""),
                 accounting_baseline_path=env.get("ACCOUNTING_BASELINE_PATH", ""),
                 accounting_cost_policy=env.get("ACCOUNTING_COST_POLICY", "actual"),
+                ai_cotrade=_ai_cotrade(env),
             )
         except (ValueError, ArithmeticError) as exc:
             if isinstance(exc, ConfigError):
@@ -157,16 +191,26 @@ class Config:
             reasons.append("paper_credentials_missing")
         if not self.watchlist:
             reasons.append("watchlist_missing")
-        if not Path(self.metadata_path).is_file():
+        strategy = _strategy(self.strategy_overrides)
+        if strategy.allowed_symbols and any(symbol not in strategy.allowed_symbols for symbol in self.watchlist):
+            reasons.append("watchlist_outside_strategy_universe")
+        if strategy.requires_float_catalyst and not Path(self.metadata_path).is_file():
             reasons.append("point_in_time_symbol_metadata_missing")
+        if strategy.preset_spec.gated and not strategy.enable_gated_presets:
+            reasons.append("gated_preset_disabled")
+        if strategy.preset_spec.required_feed == "sip" and self.data_feed != "sip":
+            reasons.append("small_cap_requires_sip_feed")
+        if strategy.preset_spec.required_feed == "iex" and self.data_feed != "iex":
+            reasons.append("liquid_preset_requires_iex")
         if self.paper_reviewed_config_hash != self.review_hash():
             reasons.append("exact_paper_configuration_not_reviewed")
         return reasons
 
     def review_hash(self):
         from .risk import RiskConfig
-        from .strategy import StrategyConfig
-        settings = {"strategy_config_id": StrategyConfig(**self.strategy_overrides).config_id,
+        strategy = _strategy(self.strategy_overrides)
+        settings = {"strategy_config_id": strategy.config_id,
+                    "strategy_preset": strategy.preset,
                     "risk_config_id": RiskConfig(**self.risk_overrides).config_id,
                     "watchlist": list(self.watchlist), "feed": self.data_feed,
                     "quote_max_age_seconds": self.quote_max_age_seconds,
@@ -175,6 +219,8 @@ class Config:
                     "accounting_history_start": self.accounting_history_start,
                     "order_type": "limit", "time_in_force": "day", "extended_hours": True,
                     "execution_host": PAPER_API_HOST}
+        if self.ai_cotrade:
+            settings["ai_cotrade"] = dict(self.ai_cotrade)
         return sha256(json.dumps(settings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def public(self):
@@ -183,6 +229,7 @@ class Config:
             "paper_host": PAPER_API_HOST, "data_host": DATA_API_HOST, "data_feed": self.data_feed,
             "paper_credentials_present": bool(self.api_key and self.api_secret),
             "watchlist": list(self.watchlist), "crypto_watchlist": list(self.crypto_watchlist),
+            "strategy_preset": _strategy(self.strategy_overrides).preset,
             "quote_max_age_seconds": self.quote_max_age_seconds,
             "order_ttl_seconds": self.order_ttl_seconds,
             "strategy_overrides": self.strategy_overrides, "risk_overrides": self.risk_overrides,
@@ -194,6 +241,7 @@ class Config:
             "accounting_history_start": self.accounting_history_start or None,
             "accounting_baseline_configured": bool(self.accounting_baseline_path),
             "accounting_cost_policy": self.accounting_cost_policy,
+            "ai_cotrade_reviewed_settings": dict(self.ai_cotrade) or None,
             "paper_blockers": self.paper_blockers(), "live_execution_supported": False,
         }
 

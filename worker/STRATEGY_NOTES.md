@@ -1,3 +1,5 @@
+> **Runtime default (2026-10-28):** `liquid_large_cap_iex_v1` for AAPL, MSFT and SPY on free Alpaca IEX. The small-cap float/news rules below are the gated `small_cap_catalyst_v1` preset (`experimental_v1`), disabled unless `enable_gated_presets` is true. See [STRATEGY_PRESETS.md](STRATEGY_PRESETS.md). Strategy research belongs to TactiRise Strategy Lab.
+
 # Experimental paper strategy: `experimental_v1`
 
 This is a deterministic, long-only price-and-volume experiment. Its functions
@@ -79,7 +81,7 @@ are decimal strings and quantities integral values. Datetimes must carry a UTC
 offset; storage and comparison normalize to UTC, and market clock calculations
 use `America/New_York` with daylight saving time.
 
-`evaluate_setup(snapshot, StrategyConfig())` expects:
+`evaluate_setup(snapshot, StrategyConfig.small_cap_catalyst(enable_gated_presets=True))` is the small-cap contract and expects:
 
 - `symbol`, `feed`, `now` and a paper mode if mode is supplied.
 - `session.date` in New York and `session.is_trading_day is True` from an exchange
@@ -90,8 +92,11 @@ use `America/New_York` with daylight saving time.
   matching `feed`; a supplied `symbol` must match.
 - `last_trade`: `price`, `timestamp`, `received_at`, matching `feed` and matching
   `symbol`. The adapter is responsible for eligible trade-condition filtering.
-- `facts`: `previous_close`, `float_shares`, `float_effective_at`, `float_known_at`,
-  `catalyst_confirmed`, `catalyst_published_at`, and `catalyst_known_at`.
+- `facts`: `previous_close`, and, for this gated preset only, `float_shares`,
+  `float_effective_at`, `float_known_at`, `catalyst_confirmed`,
+  `catalyst_published_at`, and `catalyst_known_at`. The liquid IEX default
+  (`StrategyConfig()`) still requires `previous_close` and does not read float
+  or catalyst fields.
 - `bars`: contiguous completed one-minute OHLCV bars from the current session,
   carrying `start`, `feed`, `complete is True` and preferably `available_at`.
 - `rvol`: `current_volume`, `as_of`, `feed`, 30 sorted distinct `prior_sessions`,

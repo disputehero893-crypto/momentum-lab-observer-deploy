@@ -15,7 +15,7 @@ import re
 from .journal import Journal, canonical_json
 from .models import NY, plain
 from .risk import RiskConfig, RiskManager
-from .strategy import StrategyConfig, evaluate_exit, evaluate_setup
+from .strategy import StrategyConfig, evaluate_exit, evaluate_setup, load_strategy
 
 FIXTURE_VERSION = "synthetic-replay-v1"
 RUN_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
@@ -206,10 +206,13 @@ def run_demo(config, journal=None, *, run_id="demo-v1"):
     if not RUN_ID.fullmatch(run_id):
         raise ValueError("run_id must be 1–80 letters, numbers, underscores or hyphens")
     journal = journal or Journal(config.db_path)
-    strategy = StrategyConfig(**config.strategy_overrides)
+    # The synthetic fixture is the original small-cap episode. It is not the
+    # worker's liquid IEX default, and the gate is opened only inside this replay.
+    pinned = StrategyConfig.small_cap_catalyst(enable_gated_presets=True)
+    strategy = load_strategy(config.strategy_overrides) if config.strategy_overrides else pinned
     risk_config = RiskConfig(**config.risk_overrides)
-    if strategy.config_id != StrategyConfig().config_id or risk_config.config_id != RiskConfig().config_id:
-        raise ValueError("The fixed demo fixture requires the default strategy and risk settings; replaying edited drafts is not released")
+    if strategy.config_id != pinned.config_id or risk_config.config_id != RiskConfig().config_id:
+        raise ValueError("The fixed demo fixture requires the pinned synthetic small-cap preset and default risk settings; replaying edited drafts is not released")
     settings = {"strategy": plain(asdict(strategy)), "risk": plain(asdict(risk_config)),
                 "initial_simulated_equity": config.demo_equity, "fixture_version": FIXTURE_VERSION}
     fingerprint = sha256(canonical_json(settings).encode()).hexdigest()
@@ -300,7 +303,7 @@ def run_demo(config, journal=None, *, run_id="demo-v1"):
     payload = {
         "schema_version": "1.0", "run_id": run_id, "run_key": run_id,
         "mode": "demo", "provenance": "synthetic", "status": "completed",
-        "strategy_version": "experimental_v1", "fixture_version": FIXTURE_VERSION,
+        "strategy_version": strategy.profile, "fixture_version": FIXTURE_VERSION,
         "configuration_hash": fingerprint, "strategy_config_id": strategy.config_id,
         "risk_config_id": risk_config.config_id, "generated_at": start["recorded_at"],
         "started_at": "2026-10-16T13:34:52Z", "completed_at": "2026-10-16T13:43:05Z",

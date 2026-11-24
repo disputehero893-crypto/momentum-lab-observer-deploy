@@ -42,8 +42,9 @@ class PriceHistoryAdapterTests(unittest.TestCase):
     def setUp(self):
         blocker = patch("urllib.request.OpenerDirector.open", side_effect=AssertionError(
             "Real network is forbidden in bar observation tests"))
-        blocker.start()
+        blocked = blocker.start()
         self.addCleanup(blocker.stop)
+        self.addCleanup(blocked.assert_not_called)
 
     def client(self, bodies):
         config = Config(mode="paper", paper_enabled=False, api_key="INVENTED-KEY",
