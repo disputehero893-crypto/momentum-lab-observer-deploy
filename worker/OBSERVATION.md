@@ -190,12 +190,20 @@ Observation telemetry is now sampled:
 - `observation_stopped` no longer masks the original error with a second traceback.
 
 
-Startup failure handling also covers journal directory creation and SQLite open/WAL/schema
-initialization, before the observation worker can append its startup record. ENOSPC and
-known full-volume SQLite failures are reported as the stable
-`journal_volume_full_grow_the_disk_or_free_space` diagnostic; the ambiguous SQLite
-`disk I/O error` is mapped only when free space is below the configured threshold. Other
-SQLite errors propagate unchanged. This is diagnostic fail-closed behavior: it does not
-delete, truncate, recreate, or repair the persistent journal. A full disk still needs an
-operator-approved capacity/free-space correction before restart, while preserving the
-existing journal and verifying its backup.
+`serve-observe` binds `/health` before it opens the journal or starts a broker read.
+A journal that cannot be opened, including `database or disk is full` and a file that
+is not a SQLite database, does not exit 1. The process keeps listening and `/health`
+reports `status: degraded` with `execution_disabled` and `execution_locked` true.
+`Journal.__init__` itself still raises `sqlite3.OperationalError` for a full volume;
+the one-shot `observe` command does not catch that, so an open failure there can still
+exit 1. The deployed command is `serve-observe`.
+
+Sampled cycle rows stored by the observer are a small status record plus a price-history
+digest. Quotes stay in memory. After a sampled write, the WAL is checkpointed back into
+the database file. Checkpointing does not delete event rows. `archive-journal` copies
+old rows to a gzip NDJSON file and does not delete them.
+
+ENOSPC and known full-volume SQLite failures during `Journal` construction are still
+reported as `journal_volume_full_grow_the_disk_or_free_space`. This path does not
+delete, truncate, recreate, or repair the persistent journal. A full disk still needs
+operator-approved free space before new rows will fit. Existing rows stay in place.

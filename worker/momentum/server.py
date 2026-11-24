@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
 import json
+import sqlite3
 import threading
 from urllib.parse import urlsplit, unquote, parse_qs
 import uuid
@@ -11,16 +12,85 @@ from .journal import Journal, canonical_json
 
 
 class Application:
-    def __init__(self, config, *, observation_worker=None, autopilot=None, customer_gateway=None):
+    def __init__(self, config, *, observation_worker=None, autopilot=None, customer_gateway=None,
+                 defer_journal=False):
         self.config = config
-        self.journal = Journal(config.db_path)
         self.mutation_lock = threading.Lock()
         self.observation_worker = observation_worker
         self.autopilot = autopilot
+        self.startup_error = None
+        self.journal_status = "unopened"
+        self.journal = None
         if customer_gateway is not None and (customer_gateway.worker is not autopilot
                 or customer_gateway.origin != config.cors_origin):
             raise ValueError("customer_gateway_application_mismatch")
         self.customer_gateway = customer_gateway
+        if not defer_journal:
+            self.open_journal()
+
+    def open_journal(self):
+        """Open the persistent journal without deleting it when startup cannot write."""
+        try:
+            self.journal = Journal(
+                self.config.db_path,
+                sample_seconds=self.config.journal_sample_seconds,
+                min_free_bytes=self.config.journal_min_free_mb * 1024 * 1024,
+            )
+            self.journal_status = "writable"
+            self.startup_error = None
+        except sqlite3.OperationalError as exc:
+            text = str(exc)
+            if "journal_volume_full" in text:
+                self.startup_error = "journal_volume_full_grow_the_disk_or_free_space"
+            else:
+                self.startup_error = "journal_unavailable"
+            self.journal = Journal.open_readonly(self.config.db_path)
+            self.journal_status = "read_only" if self.journal is not None else "unavailable"
+        except sqlite3.Error:
+            self.startup_error = "journal_unavailable"
+            self.journal = Journal.open_readonly(self.config.db_path)
+            self.journal_status = "read_only" if self.journal is not None else "unavailable"
+        except OSError:
+            self.startup_error = "journal_unavailable"
+            self.journal_status = "unavailable"
+
+    def control_state(self):
+        if self.journal is None:
+            return {"enabled": True, "flatten_requested": True, "reason": "journal_unreadable_fail_closed"}
+        try:
+            return self.journal.kill_switch()
+        except (sqlite3.Error, OSError, ValueError, TypeError):
+            return {"enabled": True, "flatten_requested": True, "reason": "journal_unreadable_fail_closed"}
+
+    def health(self):
+        execution_running = False
+        if self.autopilot is not None:
+            try:
+                execution_running = bool(self.autopilot.state().get("execution_enabled"))
+            except Exception:
+                execution_running = False
+        disk = self.journal.disk_report() if self.journal is not None else {
+            "free_bytes": None, "free_mb": None, "min_free_bytes": None, "min_free_mb": None,
+            "below_floor": None, "last_write_error": None}
+        journal_status = self.journal_status
+        if journal_status == "writable" and (disk.get("below_floor") or disk.get("last_write_error")):
+            journal_status = "degraded"
+        degraded = self.startup_error is not None or journal_status != "writable"
+        return {
+            "status": "degraded" if degraded else "ok",
+            "service": "momentum-lab",
+            # serve-observe cannot submit orders. Autopilot reports its own gate.
+            "execution_disabled": True if self.autopilot is None else not execution_running,
+            "execution_locked": self.autopilot is None,
+            "paper_trading_enabled": bool(self.config.paper_enabled),
+            "paper_execution_running": False if self.autopilot is None else execution_running,
+            "live_execution_supported": False,
+            "orders_submitted": 0,
+            "journal_status": journal_status,
+            "disk": disk,
+            "startup_error": self.startup_error or disk.get("last_write_error"),
+            "quarantined_payloads": self.journal.quarantined_events if self.journal is not None else None,
+        }
 
     def readiness(self):
         if self.autopilot is not None:
@@ -38,7 +108,8 @@ class Application:
                 "paper_reconciled": bool(observed and observed["paper_reconciled"]),
                 "observation_running": bool(observed and observed["running"]),
                 "paper_execution_running": False, "live_execution_supported": False,
-                "configuration": self.config.public(), "control": self.journal.kill_switch(),
+                "configuration": self.config.public(), "control": self.control_state(),
+                "journal_status": self.journal_status, "startup_error": self.startup_error,
                 "capabilities": {"synthetic_replay": True, "authenticated_journal_api": True,
                                  "paper_adapter": "implemented_and_offline_tested",
                                  "paper_session_controller": "reusable_offline_tested_component",
@@ -52,13 +123,17 @@ class Application:
                                     *(latest["blockers"] if latest else ["observation_worker_has_no_current_cycle"])]}
 
     def run(self, run_id):
+        if self.journal is None:
+            return None
         event = self.journal.event_by_key(f"demo:{run_id}:complete")
-        return event["payload"] if event else None
+        if not event or (isinstance(event.get("payload"), dict) and event["payload"].get("_quarantined") is True):
+            return None
+        return event["payload"]
 
     def state(self):
         if self.autopilot is not None:
             return {"readiness": self.readiness(), "autopilot": self.autopilot.state()}
-        completed = self.journal.latest("demo_run_completed")
+        completed = self.journal.latest("demo_run_completed") if self.journal is not None else None
         return {"readiness": self.readiness(), "latest_demo": completed["payload"] if completed else None,
                 "paper_state": self.observation_worker.state() if self.observation_worker else None,
                 "paper_state_explanation": "Observation is read-only; no HTTP route starts broker order execution."}
@@ -176,9 +251,12 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
             parsed = urlsplit(self.path)
             path = unquote(parsed.path)
             if path == "/health":
-                self.send(200, {"status": "ok", "service": "momentum-lab"})
+                self.send(200, app.health())
                 return
             if not self.authorized():
+                return
+            if app.journal is None:
+                self.send(503, {"error": "journal_unavailable", "execution_disabled": True})
                 return
             if path == "/api/autopilot/state":
                 if app.autopilot is None:
@@ -220,6 +298,10 @@ def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPSer
                 self.customer_request("POST")
                 return
             if not self.authorized():
+                return
+            if app.journal is None or app.journal_status != "writable":
+                self.send(503, {"error": "journal_not_writable", "execution_disabled": True,
+                                "broker_acknowledged": False, "positions_confirmed_flat": False})
                 return
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.send(415, {"error": "application_json_required"})

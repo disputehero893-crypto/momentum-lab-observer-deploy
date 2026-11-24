@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "kind": "ai_advisor_watch_replay",
+  "provenance": "synthetic",
+  "frames": [
+    {
+      "id": "confluence-win",
+      "symbol": "SYN",
+      "rules_accepted": true,
+      "bars": [
+        {"start": "2026-10-16T14:00:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:01:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "buy", "pattern": "breakout", "confidence": 0.8, "reason": "Stub read: price cleared the prior bar."},
+      "outcome": {"win": true, "r_multiple": 2.0}
+    },
+    {
+      "id": "rules-win",
+      "symbol": "SYN",
+      "rules_accepted": true,
+      "bars": [
+        {"start": "2026-10-16T14:02:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:03:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "wait", "pattern": "range", "confidence": 0.4, "reason": "Stub read: no long setup on this chart."},
+      "outcome": {"win": false, "r_multiple": -1.0}
+    },
+    {
+      "id": "ai-win",
+      "symbol": "SYN",
+      "rules_accepted": false,
+      "bars": [
+        {"start": "2026-10-16T14:04:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:05:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "buy", "pattern": "pullback", "confidence": 0.91, "reason": "Stub read: pullback held and turned up."},
+      "outcome": {"win": true, "r_multiple": 1.0}
+    },
+    {
+      "id": "confluence-unknown",
+      "symbol": "SYN",
+      "rules_accepted": true,
+      "bars": [
+        {"start": "2026-10-16T14:06:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:07:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "buy", "pattern": "gap", "confidence": 0.55, "reason": "Stub read: pattern is not resolved."},
+      "outcome": {"win": null, "r_multiple": null}
+    },
+    {
+      "id": "rules-unknown",
+      "symbol": "SYN",
+      "rules_accepted": true,
+      "bars": [
+        {"start": "2026-10-16T14:08:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:09:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "sell", "pattern": "double_top", "confidence": 0.7, "reason": "Stub read: chart is rolling over."},
+      "outcome": {"win": null, "r_multiple": null}
+    },
+    {
+      "id": "confluence-flat",
+      "symbol": "SYN",
+      "rules_accepted": true,
+      "bars": [
+        {"start": "2026-10-16T14:10:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:11:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "buy", "pattern": "pennant", "confidence": 0.5, "reason": "Stub read: break was flat versus planned risk."},
+      "outcome": {"win": true, "r_multiple": 0.0}
+    },
+    {
+      "id": "ai-below-threshold",
+      "symbol": "SYN",
+      "rules_accepted": false,
+      "bars": [
+        {"start": "2026-10-16T14:12:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:13:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "buy", "pattern": "bull_flag", "confidence": 0.4, "reason": "Stub read: only a weak bounce."}
+    },
+    {
+      "id": "ai-not-buy",
+      "symbol": "SYN",
+      "rules_accepted": false,
+      "bars": [
+        {"start": "2026-10-16T14:14:00Z", "open": "100", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
+        {"start": "2026-10-16T14:15:00Z", "open": "100.5", "high": "102", "low": "100", "close": "101", "volume": "1100"}
+      ],
+      "stub": {"call": "sell", "pattern": "trend_down", "confidence": 0.95, "reason": "Stub read: selling pressure dominates."}
+    }
+  ]
+}

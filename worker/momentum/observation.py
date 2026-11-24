@@ -25,13 +25,40 @@ from .models import NY
 from .publisher import Publisher
 from .price_history import PriceHistoryCollector, price_history_summary, sanitize_price_history
 from .crypto_observation import (CryptoQuoteReader, CryptoWatchCollector,
-                                 sanitize_crypto_watch, crypto_watch_summary)
+                                 sanitize_crypto_watch)
 from . import paper_run_hooks
 from .session import PaperSession
 
 
 class ObservationError(RuntimeError):
     """Only fixed diagnostic codes should cross the runtime boundary."""
+
+
+def journal_observation_record(result):
+    """Small durable cycle record. Quotes and decisions stay in memory only."""
+    broker = result.get("broker") or {}
+    data = result.get("data_feed") or {}
+    accounting = result.get("accounting") or {}
+    session = result.get("session") or {}
+    return {
+        "schema_version": result.get("schema_version"),
+        "mode": "paper",
+        "runtime": "observation_only",
+        "cycle_id": result.get("cycle_id"),
+        "started_at": result.get("started_at"),
+        "completed_at": result.get("completed_at"),
+        "execution_enabled": False,
+        "orders_submitted": 0,
+        "error_code": result.get("error_code"),
+        "halted": result.get("halted"),
+        "blockers": result.get("blockers"),
+        "broker_verified": broker.get("verified"),
+        "data_verified": data.get("verified"),
+        "accounting_availability": accounting.get("availability"),
+        "accounting_complete": accounting.get("complete"),
+        "session_reconciled": session.get("reconciled"),
+        "session_errors": session.get("errors"),
+    }
 
 
 class ReadOnlyPaperClient(PaperClient):
@@ -163,6 +190,8 @@ class ObservationWorker:
         self._latest = None
         self._account_id = None
         self._baseline_cache = None
+        self._loop_error = None
+        self._journal_degraded = False
 
     def __enter__(self):
         if self._active or self.stop_event.is_set():
@@ -178,11 +207,12 @@ class ObservationWorker:
                     {"instance_id": self.instance_id, "mode": "paper", "execution_enabled": False},
                     key="observe-start:" + self.instance_id, timestamp=self.clock().isoformat())
             except sqlite3.OperationalError as exc:
-                if self.journal._is_full_volume_error(exc):
-                    # Refuse to observe without a durable audit trail, but say why and how to fix it.
-                    # Ambiguous I/O errors keep their original meaning unless low space is measured.
-                    raise ObservationError("journal_volume_full_grow_the_disk_or_free_space") from None
-                raise
+                # A full disk used to exit 1 here. Keep the process up and do not
+                # delete the journal. The stored rows stay where they are.
+                self.journal.note_write_error(exc)
+                self._journal_degraded = True
+            else:
+                self._journal_degraded = False
             paper_run_hooks.start_session(self)
             self._active = True
         except BaseException:
@@ -406,19 +436,18 @@ class ObservationWorker:
             else:
                 result["cloud_state_published"] = False
                 result["blockers"].append("cloud_worker_not_configured")
-            journal_result = {**result, "price_history": price_history_summary(result["price_history"])}
-            if "crypto_watch" in journal_result:
-                journal_result["crypto_watch"] = crypto_watch_summary(result["crypto_watch"])
             paper_run_hooks.record_cycle(self, result)
-            # Per-cycle snapshots dominate journal growth (about 128 MB/day at a 5 s poll).
-            # Persist on change of health/blockers, otherwise at most once per sample window.
+            # The rich cycle stays in memory for /api/state. SQLite gets a small
+            # sampled record so quotes are not what fills the disk.
+            record = journal_observation_record(result)
+            record["price_history"] = price_history_summary(result.get("price_history"))
             self.journal.append_sampled("paper-observe-" + started.astimezone(NY).date().isoformat(),
-                "paper_observation_cycle", journal_result, key="observe-cycle:" + cycle_id,
+                "paper_observation_cycle", record, key="observe-cycle:" + cycle_id,
                 timestamp=result["completed_at"],
-                signature=canonical_json([result["error_code"], result["blockers"], result["halted"],
-                                          result["broker"]["verified"], result["data_feed"].get("verified"),
-                                          result["cloud_state_published"],
-                                          result["acknowledged_commands"]]))
+                signature=canonical_json([record["error_code"], record["blockers"], record["halted"],
+                                          record["broker_verified"], record["data_verified"]]))
+            if not self.journal._low_disk():
+                self.journal.checkpoint_wal()
             with self._state_lock:
                 self._latest = deepcopy(result)
             return deepcopy(result)
@@ -460,7 +489,18 @@ class ObservationWorker:
         completed = 0
         while not self.stop_event.is_set() and (max_cycles is None or completed < max_cycles):
             began = elapsed_clock()
-            self.cycle()
+            try:
+                self.cycle()
+            except (sqlite3.Error, ObservationError, OSError) as exc:
+                # A persistent journal fault must not exit the long-running
+                # process. Bounded one-shot runs still surface the error.
+                self._loop_error = "journal_volume_full_grow_the_disk_or_free_space" if (
+                    isinstance(exc, sqlite3.Error) and self.journal._is_full_volume_error(exc)
+                ) else (str(exc) if isinstance(exc, ObservationError) else "observation_cycle_failed")
+                if max_cycles is not None:
+                    raise
+                self.stop_event.wait(max(1.0, self.config.poll_seconds))
+                continue
             completed += 1
             if max_cycles is not None and completed >= max_cycles:
                 break
