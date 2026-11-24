@@ -56,6 +56,12 @@ class Config:
     data_feed: str = "iex"
     watchlist: tuple = ()
     crypto_watchlist: tuple = ()  # optional read-only spot crypto, never stock strategy inputs
+    oanda_practice_api_token: str = field(default="", repr=False)
+    oanda_practice_account_id: str = field(default="", repr=False)
+    oanda_environment: str = ""
+    oanda_practice_orders_enabled: bool = False
+    forex_watchlist: tuple = ()  # optional read-only practice forex, never stock strategy inputs
+    forex_risk_overrides: dict = field(default_factory=dict)
     db_path: str = "./data/momentum.sqlite3"
     export_dir: str = "./exports"
     metadata_path: str = "./symbol_metadata.json"
@@ -96,6 +102,23 @@ class Config:
                     raise ValueError
             except (TypeError, ValueError) as exc:
                 raise ConfigError("CRYPTO_WATCHLIST must contain 1-10 unique uppercase USD crypto pairs") from exc
+        try:
+            from .forex_risk import ForexRiskConfig
+            from .oanda import parse_forex_watchlist, validate_account_id, validate_token
+            if self.oanda_environment not in {"", "practice"}:
+                raise ValueError("OANDA_ENVIRONMENT must be practice; live fxTrade is not implemented")
+            if self.forex_watchlist:
+                if parse_forex_watchlist(",".join(self.forex_watchlist)) != tuple(self.forex_watchlist):
+                    raise ValueError
+            if self.oanda_practice_api_token:
+                validate_token(self.oanda_practice_api_token)
+            if self.oanda_practice_account_id:
+                validate_account_id(self.oanda_practice_account_id)
+            if not isinstance(self.forex_risk_overrides, dict):
+                raise ValueError("OANDA_FOREX_RISK_CONFIG_JSON must be a JSON object")
+            ForexRiskConfig(**self.forex_risk_overrides)
+        except (TypeError, ValueError, ArithmeticError) as exc:
+            raise ConfigError("OANDA practice forex settings are invalid") from exc
         if not 1 <= self.port <= 65535:
             raise ConfigError("PORT must be between 1 and 65535")
         if not 0 <= self.journal_sample_seconds <= 3600:
@@ -138,6 +161,13 @@ class Config:
                 raise ConfigError(f"{name} cannot override the fixed paper API host")
         if env.get("ALPACA_PAPER_TRADE", "true").lower() not in {"true", "1", "yes"}:
             raise ConfigError("ALPACA_PAPER_TRADE cannot enable another execution environment")
+        try:
+            from .oanda import parse_forex_watchlist, refuse_host_overrides, refuse_public_oanda_secrets
+            refuse_host_overrides(env)
+            refuse_public_oanda_secrets(env)
+            forex_watchlist = parse_forex_watchlist(env.get("OANDA_FOREX_WATCHLIST", ""))
+        except ValueError as exc:
+            raise ConfigError(str(exc) or "Invalid OANDA practice configuration") from exc
         def obj(name):
             try:
                 value = json.loads(env.get(name, "{}"))
@@ -156,6 +186,12 @@ class Config:
                 data_feed=env.get("ALPACA_DATA_FEED", "iex"),
                 watchlist=_watchlist(env.get("WATCHLIST", "")),
                 crypto_watchlist=tuple(s.strip().upper() for s in env.get("CRYPTO_WATCHLIST", "").split(",") if s.strip()),
+                oanda_practice_api_token=env.get("OANDA_PRACTICE_API_TOKEN", ""),
+                oanda_practice_account_id=env.get("OANDA_PRACTICE_ACCOUNT_ID", ""),
+                oanda_environment=env.get("OANDA_ENVIRONMENT", "").strip().lower(),
+                oanda_practice_orders_enabled=flag(env.get("OANDA_PRACTICE_ORDERS_ENABLED"), "OANDA_PRACTICE_ORDERS_ENABLED"),
+                forex_watchlist=forex_watchlist,
+                forex_risk_overrides=obj("OANDA_FOREX_RISK_CONFIG_JSON"),
                 db_path=env.get("JOURNAL_PATH", "./data/momentum.sqlite3"),
                 export_dir=env.get("EXPORT_DIR", "./exports"),
                 metadata_path=env.get("SYMBOL_METADATA_PATH", "./symbol_metadata.json"),
@@ -202,6 +238,11 @@ class Config:
             reasons.append("small_cap_requires_sip_feed")
         if strategy.preset_spec.required_feed == "iex" and self.data_feed != "iex":
             reasons.append("liquid_preset_requires_iex")
+        if self.oanda_practice_orders_enabled:
+            if self.oanda_environment != "practice":
+                reasons.append("oanda_environment_not_practice")
+            if not self.oanda_practice_api_token or not self.oanda_practice_account_id:
+                reasons.append("oanda_practice_credentials_missing")
         if self.paper_reviewed_config_hash != self.review_hash():
             reasons.append("exact_paper_configuration_not_reviewed")
         return reasons
@@ -221,6 +262,14 @@ class Config:
                     "execution_host": PAPER_API_HOST}
         if self.ai_cotrade:
             settings["ai_cotrade"] = dict(self.ai_cotrade)
+        if self.oanda_practice_orders_enabled:
+            from .forex_risk import ForexRiskConfig
+            settings["oanda_practice_orders"] = {
+                "enabled": True,
+                "environment": self.oanda_environment,
+                "rest_host": "api-fxpractice.oanda.com",
+                "forex_risk_config_id": ForexRiskConfig(**self.forex_risk_overrides).config_id,
+            }
         return sha256(json.dumps(settings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def public(self):
@@ -229,6 +278,13 @@ class Config:
             "paper_host": PAPER_API_HOST, "data_host": DATA_API_HOST, "data_feed": self.data_feed,
             "paper_credentials_present": bool(self.api_key and self.api_secret),
             "watchlist": list(self.watchlist), "crypto_watchlist": list(self.crypto_watchlist),
+            "forex_watchlist": list(self.forex_watchlist),
+            "oanda_practice_configured": bool(self.oanda_practice_api_token and self.oanda_practice_account_id),
+            "oanda_environment": self.oanda_environment or None,
+            "oanda_practice_orders_enabled": bool(self.oanda_practice_orders_enabled),
+            "forex_risk_overrides": dict(self.forex_risk_overrides),
+            "oanda_practice_rest_host": "api-fxpractice.oanda.com",
+            "oanda_practice_stream_host": "stream-fxpractice.oanda.com",
             "strategy_preset": _strategy(self.strategy_overrides).preset,
             "quote_max_age_seconds": self.quote_max_age_seconds,
             "order_ttl_seconds": self.order_ttl_seconds,

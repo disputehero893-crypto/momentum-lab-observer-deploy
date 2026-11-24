@@ -9,11 +9,14 @@ reconciliation, authoritative positions, or a separate safe exit pathway.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 # Default feed label for docs/telemetry. RiskLimits does not fetch market data.
 DEFAULT_FEED = "iex"
+FOREX_PRACTICE_FEED = "oanda_practice"
+_FOREX_PAIR = re.compile(r"^[A-Z]{3}[_/][A-Z]{3}$")
 
 
 @dataclass(frozen=True)
@@ -55,7 +58,13 @@ def check_paper_intent(
     limits: RiskLimits = RiskLimits(),
 ) -> tuple[bool, str]:
     """Screen entries only; never use this function to block protective exits."""
-    if getattr(limits, "feed", DEFAULT_FEED) != DEFAULT_FEED:
+    symbol = getattr(intent, "symbol", "")
+    is_forex = isinstance(symbol, str) and _FOREX_PAIR.fullmatch(symbol.strip().upper()) is not None
+    feed = getattr(limits, "feed", DEFAULT_FEED)
+    if is_forex:
+        if feed != FOREX_PRACTICE_FEED:
+            return False, "non_practice_forex_feed_rejected"
+    elif feed != DEFAULT_FEED:
         return False, "non_iex_feed_rejected"
     if not isinstance(state.kill_switch, bool) or state.kill_switch:
         return False, "kill_switch_or_invalid_state"

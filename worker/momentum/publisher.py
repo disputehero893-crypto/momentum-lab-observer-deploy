@@ -19,6 +19,7 @@ from .strategy import StrategyConfig, load_strategy
 from .strategy_review import build_strategy_review
 from .price_history import sanitize_price_history
 from .crypto_observation import sanitize_crypto_watch
+from .forex_observation import sanitize_forex_watch
 
 
 UTC = timezone.utc
@@ -140,7 +141,8 @@ def build_worker_state(owner_id, instance_id, *, now, broker_verified=False,
                        data_as_of=None, data_received_at=None, halted=False,
                        error_code=None, max_data_age_seconds=2, market_watch=None,
                        allowed_symbols=(), strategy_config=None, price_history=None,
-                       crypto_watch=None, allowed_crypto_pairs=()):
+                       crypto_watch=None, allowed_crypto_pairs=(),
+                       forex_watch=None, allowed_forex_pairs=()):
     """Build the existing dashboard contract from validated provider evidence.
 
     The caller attests actual account/position/order reads, not a saved account
@@ -226,6 +228,13 @@ def build_worker_state(owner_id, instance_id, *, now, broker_verified=False,
                 crypto_watch, allowed_pairs=allowed_crypto_pairs, now=now)
         except (ValueError, TypeError, KeyError, ArithmeticError, UnicodeError, RecursionError):
             pass
+    if forex_watch is not None and allowed_forex_pairs:
+        try:
+            # Strictly optional: bad forex data cannot hide functioning equity data.
+            row["payload"]["forex_watch"] = sanitize_forex_watch(
+                forex_watch, allowed_pairs=allowed_forex_pairs, now=now)
+        except (ValueError, TypeError, KeyError, ArithmeticError, UnicodeError, RecursionError):
+            pass
     return row
 
 
@@ -252,6 +261,7 @@ class Publisher:
         self.max_data_age_seconds = _max_data_age(config.quote_max_age_seconds)
         self.watchlist, self.data_feed = tuple(config.watchlist), config.data_feed
         self.crypto_watchlist = tuple(config.crypto_watchlist)
+        self.forex_watchlist = tuple(config.forex_watchlist)
         self.strategy_config = load_strategy(config.strategy_overrides)
         self.transport = transport or self._http
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -332,7 +342,7 @@ class Publisher:
     def publish_worker_state(self, *, instance_id, broker_verified=False, broker_checked_at=None,
                              data_verified=False, data_feed=None, data_as_of=None, data_received_at=None,
                              halted=False, error_code=None, max_data_age_seconds=None,
-                             market_watch=None, price_history=None, crypto_watch=None):
+                             market_watch=None, price_history=None, crypto_watch=None, forex_watch=None):
         if market_watch is not None:
             if data_feed is not None and data_feed != self.data_feed:
                 raise ValueError("Market Watch feed must match the worker configuration")
@@ -344,7 +354,8 @@ class Publisher:
                                  max_data_age_seconds=self.max_data_age_seconds if max_data_age_seconds is None
                                  else max_data_age_seconds, market_watch=market_watch, allowed_symbols=self.watchlist,
                                  strategy_config=self.strategy_config, price_history=price_history,
-                                 crypto_watch=crypto_watch, allowed_crypto_pairs=self.crypto_watchlist)
+                                 crypto_watch=crypto_watch, allowed_crypto_pairs=self.crypto_watchlist,
+                                 forex_watch=forex_watch, allowed_forex_pairs=self.forex_watchlist)
         # Preserve the expected row even if an injected transport mutates input.
         expected = json.loads(canonical_json(row))
         result = self.request("POST", "worker_state", {"on_conflict": "owner_id", "select": WORKER_COLUMNS}, row,
