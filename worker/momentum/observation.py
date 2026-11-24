@@ -26,6 +26,9 @@ from .publisher import Publisher
 from .price_history import PriceHistoryCollector, price_history_summary, sanitize_price_history
 from .crypto_observation import (CryptoQuoteReader, CryptoWatchCollector,
                                  sanitize_crypto_watch)
+from .forex_observation import (ForexWatchCollector, forex_watch_summary,
+                                sanitize_forex_watch)
+from .oanda import OandaPracticeClient
 from . import paper_run_hooks
 from .session import PaperSession
 
@@ -157,7 +160,7 @@ def _baseline(path, *, account_id, window_start):
 class ObservationWorker:
     def __init__(self, config, *, provider=None, journal=None, snapshot_builder=None,
                  publisher=None, activity_fetcher=None, clock=None, instance_id=None,
-                 price_history_collector=None, crypto_collector=None):
+                 price_history_collector=None, crypto_collector=None, forex_collector=None):
         if config.mode != "paper":
             raise ObservationError("observation_requires_explicit_paper_mode")
         self.config = config
@@ -177,6 +180,10 @@ class ObservationWorker:
         self.crypto_collector = (crypto_collector or CryptoWatchCollector(
             CryptoQuoteReader(config), pairs=config.crypto_watchlist, clock=self.clock)
             if config.crypto_watchlist else None)
+        # Forex is opt-in practice observation and never enters the stock strategy builder.
+        self.forex_collector = (forex_collector or ForexWatchCollector(
+            OandaPracticeClient(config), pairs=config.forex_watchlist, clock=self.clock)
+            if config.forex_watchlist else None)
         self.session = PaperSession(config, self.provider, journal=self.journal,
                                     snapshot_builder=self.builder, clock=self.clock)
         cloud = (config.supabase_url, config.supabase_service_role_key, config.owner_user_id)
@@ -328,6 +335,14 @@ class ObservationWorker:
         except (ValueError, TypeError, KeyError, ArithmeticError, UnicodeError, RecursionError):
             return None
 
+    def _forex_state(self, report, *, now):
+        if report is None or not self.config.forex_watchlist:
+            return None
+        try:
+            return sanitize_forex_watch(report, allowed_pairs=self.config.forex_watchlist, now=now)
+        except (ValueError, TypeError, KeyError, ArithmeticError, UnicodeError, RecursionError):
+            return None
+
     def cycle(self):
         if not self._active or self.stop_event.is_set():
             raise ObservationError("observation_cycle_requires_active_lease")
@@ -374,6 +389,13 @@ class ObservationWorker:
                     except (RuntimeError, ValueError, TypeError, KeyError, OSError, ArithmeticError):
                         result["crypto_watch"] = None
                         result["blockers"].append("crypto_watch_unavailable")
+                if self.forex_collector is not None and not self.stop_event.is_set():
+                    # Separate GET-only practice pricing; forex failure cannot fail stock reads.
+                    try:
+                        result["forex_watch"] = self.forex_collector.collect()
+                    except (RuntimeError, ValueError, TypeError, KeyError, OSError, ArithmeticError):
+                        result["forex_watch"] = None
+                        result["blockers"].append("forex_watch_unavailable")
                 stage = "activity_accounting"
                 ledger, receipt = self._accounting(account_id, cycle_id, self.clock())
                 result["accounting"] = {k: deepcopy(v) for k, v in ledger.items()
@@ -415,6 +437,8 @@ class ObservationWorker:
             result["price_history"] = self._history_state(result["price_history"], now=self.clock(), watch=result["market_watch"])
             if "crypto_watch" in result:
                 result["crypto_watch"] = self._crypto_state(result["crypto_watch"], now=self.clock())
+            if "forex_watch" in result:
+                result["forex_watch"] = self._forex_state(result["forex_watch"], now=self.clock())
             result["blockers"] = sorted(set(result["blockers"]))
             result["acknowledged_commands"] = sorted(set(result["acknowledged_commands"]))
             if self.publisher is not None:
@@ -428,6 +452,8 @@ class ObservationWorker:
                     # Preserve the existing stock-only publisher invocation by default.
                     if "crypto_watch" in result:
                         publish_args["crypto_watch"] = result["crypto_watch"]
+                    if "forex_watch" in result:
+                        publish_args["forex_watch"] = result["forex_watch"]
                     self.publisher.publish_worker_state(**publish_args)
                     result["cloud_state_published"] = True
                 except Exception:
@@ -441,6 +467,8 @@ class ObservationWorker:
             # sampled record so quotes are not what fills the disk.
             record = journal_observation_record(result)
             record["price_history"] = price_history_summary(result.get("price_history"))
+            if "forex_watch" in result:
+                record["forex_watch"] = forex_watch_summary(result.get("forex_watch"))
             self.journal.append_sampled("paper-observe-" + started.astimezone(NY).date().isoformat(),
                 "paper_observation_cycle", record, key="observe-cycle:" + cycle_id,
                 timestamp=result["completed_at"],
@@ -467,6 +495,8 @@ class ObservationWorker:
             latest["price_history"] = self._history_state(latest["price_history"], now=now, watch=latest.get("market_watch"))
         if latest and latest.get("crypto_watch") is not None:
             latest["crypto_watch"] = self._crypto_state(latest["crypto_watch"], now=now)
+        if latest and latest.get("forex_watch") is not None:
+            latest["forex_watch"] = self._forex_state(latest["forex_watch"], now=now)
         current = bool(self._active and latest and _fresh(latest["completed_at"], now, 30))
         broker = bool(current and latest["broker"]["verified"]
                       and _fresh(latest["broker"]["checked_at"], now, 30))
