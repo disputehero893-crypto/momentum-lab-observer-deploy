@@ -10,6 +10,7 @@ from urllib.request import Request, HTTPRedirectHandler, build_opener
 
 from .config import PAPER_API_HOST, DATA_API_HOST, SYMBOL
 from .journal import utc_now
+from .presets import APPROVED_PAPER_PROFILES
 
 class PaperDisabled(RuntimeError):
     pass
@@ -227,17 +228,32 @@ class PaperClient:
         identity = "|".join([intent["symbol"], intent["side"], setup, str(intent.get("exit_generation", "0"))])
         return "mlab_" + sha256(identity.encode()).hexdigest()[:36]
 
+    def _submission_freshness(self, intent, quote):
+        """Recheck time-sensitive evidence after potentially blocking guards."""
+        now = self.clock()
+        age = (now - parse_time(quote["timestamp"])).total_seconds()
+        receipt_age = (now - parse_time(quote["received_at"])).total_seconds()
+        if age < 0 or receipt_age < 0 or max(age, receipt_age) > self.config.quote_max_age_seconds:
+            raise PaperDisabled("Quote stale before order submission")
+        intent_age = (now - parse_time(intent["observed_at"])).total_seconds()
+        if not 0 <= intent_age <= 2:
+            raise PaperDisabled("Intention stale before order submission")
+        if intent["side"] == "buy":
+            risk_age = (now - parse_time(intent["risk_checked_at"])).total_seconds()
+            if not 0 <= risk_age <= 2 or intent.get("paper_only") is not True or intent.get("live_enabled") is not False:
+                raise PaperDisabled("A fresh paper risk approval is required")
+
     def submit(self, intent, journal, run_id, *, quote, guard):
         """Persist before POST; recover by ID, never blindly repeat an ambiguous POST."""
         self._enabled()
         blockers = self.config.paper_blockers()
         if blockers:
             raise PaperDisabled("Paper execution is blocked: " + ", ".join(blockers))
-        from .strategy import StrategyConfig
+        from .strategy import load_strategy
         from .risk import RiskConfig
-        if intent.get("mode") != "paper" or intent.get("profile") != "experimental_v1":
+        if intent.get("mode") != "paper" or intent.get("profile") not in APPROVED_PAPER_PROFILES:
             raise PaperDisabled("Unapproved intention environment or profile")
-        if intent.get("config_id") != StrategyConfig(**self.config.strategy_overrides).config_id:
+        if intent.get("config_id") != load_strategy(self.config.strategy_overrides).config_id:
             raise PaperDisabled("Strategy configuration changed since the intention")
         if intent.get("side") == "buy" and intent.get("risk_config_id") != RiskConfig(**self.config.risk_overrides).config_id:
             raise PaperDisabled("Entry is missing a current risk approval")
@@ -274,22 +290,13 @@ class PaperClient:
             # A definitive rejection/not-sent event can be inspected, but this setup still does not retry automatically.
             raise AmbiguousSubmission("Previously attempted order not found; automatic resubmission blocked")
         guard()
-        age = (self.clock() - parse_time(quote["timestamp"])).total_seconds()
-        receipt_age = (self.clock() - parse_time(quote["received_at"])).total_seconds()
-        if age < 0 or receipt_age < 0 or max(age, receipt_age) > self.config.quote_max_age_seconds:
-            raise PaperDisabled("Quote stale before order submission")
-        intent_age = (self.clock()-parse_time(intent["observed_at"])).total_seconds()
-        if not 0 <= intent_age <= 2:
-            raise PaperDisabled("Intention stale before order submission")
-        if intent["side"] == "buy":
-            risk_age = (self.clock()-parse_time(intent["risk_checked_at"])).total_seconds()
-            if not 0 <= risk_age <= 2 or intent.get("paper_only") is not True or intent.get("live_enabled") is not False:
-                raise PaperDisabled("A fresh paper risk approval is required")
+        self._submission_freshness(intent, quote)
         journal.append(run_id, "paper_order_requested", {"client_order_id": client_id, "intent": intent, "request": payload},
                        key=key)
         # Recheck the locally durable kill switch immediately before the external request.
         try:
             guard()
+            self._submission_freshness(intent, quote)
         except Exception:
             journal.append(run_id, "paper_order_not_sent", {"client_order_id": client_id, "reason": "execution_gate_changed"},
                            key="not-sent:" + client_id)
@@ -308,13 +315,19 @@ class PaperClient:
                        key="ack:" + client_id)
         return order
 
-    def cancel(self, order, journal, run_id):
+    def cancel(self, order, journal, run_id, *, guard=None):
         """Reconcile before retrying a cancel, at most three attempts per order.
 
         Cancel acceptance is not confirmation or flatness. A pending cancel is
         observed, not repeated. An unresolved third attempt needs operator review.
+        A supplied guard must return exactly True. It checks process/lease
+        authority, not entry permission: a halt may still need cancellation.
         """
         self._enabled()
+        def check_guard():
+            if guard is not None and guard() is not True:
+                raise PaperDisabled("Cancellation service is stopping or no longer owns execution")
+        check_guard()
         order_id = str(order.get("id", ""))
         client_id = str(order.get("client_order_id", ""))
         if not client_id.startswith("mlab_") or not re.fullmatch(r"[A-Za-z0-9-]{1,80}", order_id):
@@ -322,6 +335,7 @@ class PaperClient:
         if not journal.event_by_key("paper-request:" + client_id):
             raise PaperDisabled("Cannot cancel an order absent from the durable request journal")
         fresh = self.order_by_client_id(client_id)
+        check_guard()
         if fresh is None or str(fresh.get("id")) != order_id:
             raise BrokerError("Order identity could not be reconciled before cancellation")
         status = fresh.get("status")
@@ -342,6 +356,14 @@ class PaperClient:
         journal.append(run_id, "paper_cancel_requested",
                        {"order_id": order_id, "client_order_id": client_id, "attempt": attempt},
                        key=key, timestamp=self.clock().isoformat())
+        try:
+            check_guard()
+        except Exception:
+            journal.append(run_id, "paper_cancel_not_sent",
+                           {"order_id": order_id, "client_order_id": client_id, "attempt": attempt,
+                            "reason": "execution_gate_changed"},
+                           key=f"cancel-not-sent:{order_id}:{attempt}")
+            raise
         try:
             self._request("DELETE", "/v2/orders/" + order_id)
             journal.append(run_id, "paper_cancel_accepted", {"order_id": order_id, "confirmed_canceled": False},

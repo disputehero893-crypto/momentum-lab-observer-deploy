@@ -8,7 +8,13 @@ import json
 import unittest
 
 from momentum.models import InputError, NY, timestamp
+from momentum.presets import LIQUID_IEX_UNIVERSE, PRESET_LIQUID_IEX, PRESET_LIQUID_IEX_V2
 from momentum.strategy import StrategyConfig, compute_rvol, evaluate_exit, evaluate_setup
+
+
+def experimental(**overrides):
+    """Original small-cap rules, with the gate opened for this synthetic fixture."""
+    return StrategyConfig.small_cap_catalyst(enable_gated_presets=True, **overrides)
 
 
 def valid_snapshot():
@@ -75,16 +81,31 @@ def shift_prices(snapshot, amount):
     snapshot["last_trade"]["price"] = str(Decimal(snapshot["last_trade"]["price"]) + amount)
 
 
+class DefaultPresetTests(unittest.TestCase):
+    def test_default_matches_liquid_universe_and_rejects_the_small_cap_fixture(self):
+        cfg = StrategyConfig()
+        self.assertEqual(cfg.preset, PRESET_LIQUID_IEX_V2)
+        self.assertEqual(cfg.preset, PRESET_LIQUID_IEX)
+        self.assertEqual(cfg.allowed_symbols, LIQUID_IEX_UNIVERSE)
+        self.assertFalse(cfg.requires_float_catalyst)
+        self.assertFalse(cfg.enable_gated_presets)
+        self.assertEqual(cfg, StrategyConfig.liquid_iex())
+        blocked = evaluate_setup(valid_snapshot())
+        self.assertEqual(blocked.reasons[0], "symbol_not_in_preset_universe")
+        gated = evaluate_setup(valid_snapshot(), StrategyConfig.small_cap_catalyst())
+        self.assertEqual(gated.reasons[0], "gated_preset_disabled")
+
+
 class SetupTests(unittest.TestCase):
     def assert_reject(self, snapshot, reason):
-        result = evaluate_setup(snapshot)
+        result = evaluate_setup(snapshot, experimental())
         self.assertFalse(result.accepted, result.to_dict())
         self.assertIn(reason, result.reasons, result.to_dict())
         self.assertIsNone(result.intent)
         self.assertEqual(len(result.metrics["config_id"]), 64)
 
     def test_complete_baseline_and_serialization(self):
-        result = evaluate_setup(valid_snapshot())
+        result = evaluate_setup(valid_snapshot(), experimental())
         self.assertTrue(result.accepted, result.to_dict())
         self.assertEqual(result.intent["entry_limit"], "6.31")
         self.assertEqual(result.intent["stop_price"], "6.22")
@@ -102,7 +123,7 @@ class SetupTests(unittest.TestCase):
                 snapshot["quote"]["bid"] = snapshot["quote"]["ask"] = price
                 snapshot["last_trade"]["price"] = price
                 snapshot["facts"]["previous_close"] = previous_close
-                self.assertTrue(evaluate_setup(snapshot).accepted, evaluate_setup(snapshot).to_dict())
+                self.assertTrue(evaluate_setup(snapshot, experimental()).accepted, evaluate_setup(snapshot, experimental()).to_dict())
         for price in ("1.99", "20.01"):
             snapshot = valid_snapshot()
             snapshot["quote"]["bid"] = snapshot["quote"]["ask"] = price
@@ -114,7 +135,7 @@ class SetupTests(unittest.TestCase):
         shift_prices(snapshot, "0.30")
         snapshot["facts"]["previous_close"] = "6.00"
         snapshot["facts"]["float_shares"] = 19_999_999
-        result = evaluate_setup(snapshot)
+        result = evaluate_setup(snapshot, experimental())
         self.assertTrue(result.accepted, result.to_dict())
         self.assertEqual(Decimal(result.metrics["gain_pct"]), Decimal(10))
         snapshot["facts"]["previous_close"] = "6.01"
@@ -151,11 +172,11 @@ class SetupTests(unittest.TestCase):
                          {**valid_snapshot(), "quote": []}, {**valid_snapshot(), "last_trade": None},
                          {**valid_snapshot(), "rvol": None}):
             with self.subTest(snapshot_type=type(snapshot).__name__):
-                self.assertFalse(evaluate_setup(snapshot).accepted)
+                self.assertFalse(evaluate_setup(snapshot, experimental()).accepted)
         for value in ("NaN", "Infinity", "-1", True, None):
             snapshot = valid_snapshot()
             snapshot["quote"]["ask"] = value
-            self.assertFalse(evaluate_setup(snapshot).accepted)
+            self.assertFalse(evaluate_setup(snapshot, experimental()).accepted)
 
     def test_current_completed_bar_and_delayed_bar_cannot_leak(self):
         snapshot = valid_snapshot()
@@ -176,7 +197,7 @@ class SetupTests(unittest.TestCase):
         snapshot["last_trade"]["price"] = "6.29"
         self.assert_reject(snapshot, "waiting_for_breakout")
         snapshot["last_trade"]["price"] = "6.30"
-        self.assertTrue(evaluate_setup(snapshot).accepted)
+        self.assertTrue(evaluate_setup(snapshot, experimental()).accepted)
         snapshot["quote"]["ask"] = "6.34"
         self.assert_reject(snapshot, "entry_extended_or_inconsistent")
 
@@ -184,7 +205,7 @@ class SetupTests(unittest.TestCase):
         snapshot = valid_snapshot()
         snapshot["now"] = "2026-10-16T13:35:03Z"
         snapshot["last_trade"]["timestamp"] = snapshot["last_trade"]["received_at"] = snapshot["now"]
-        self.assertTrue(evaluate_setup(snapshot).accepted)
+        self.assertTrue(evaluate_setup(snapshot, experimental()).accepted)
         snapshot["now"] = "2026-10-16T13:35:03.001Z"
         self.assert_reject(snapshot, "stale_quote")
         snapshot = valid_snapshot()
@@ -207,12 +228,12 @@ class SetupTests(unittest.TestCase):
 
     def test_configuration_hash_changes_setup_identity(self):
         snapshot = valid_snapshot()
-        first = evaluate_setup(snapshot)
-        second = evaluate_setup(snapshot, replace(StrategyConfig(), max_hold_seconds=599))
+        first = evaluate_setup(snapshot, experimental())
+        second = evaluate_setup(snapshot, replace(experimental(), max_hold_seconds=599))
         self.assertTrue(first.accepted and second.accepted)
         self.assertNotEqual(first.intent["config_id"], second.intent["config_id"])
         self.assertNotEqual(first.intent["setup_id"], second.intent["setup_id"])
-        self.assertEqual(first.intent["setup_id"], evaluate_setup(snapshot).intent["setup_id"])
+        self.assertEqual(first.intent["setup_id"], evaluate_setup(snapshot, experimental()).intent["setup_id"])
 
     def test_configuration_cannot_enable_live_or_undefined_math(self):
         for changes in ({"mode": "live"}, {"profile": "exact_ross"}, {"max_spread": "NaN"},
@@ -231,7 +252,7 @@ class RvolTests(unittest.TestCase):
         snapshot = valid_snapshot()
         self.assertEqual(self.compute(snapshot), Decimal(5))
         snapshot["rvol"]["current_volume"] = 499999
-        self.assertIn("rvol_below_threshold", evaluate_setup(snapshot).reasons)
+        self.assertIn("rvol_below_threshold", evaluate_setup(snapshot, experimental()).reasons)
 
     def test_future_session_full_day_clock_and_mixed_feed_are_rejected(self):
         for field, value, reason in (("session", "2026-10-16", "lookahead_rvol_history"),
@@ -292,8 +313,10 @@ class ExitTests(unittest.TestCase):
     def test_maximum_hold_and_session_end(self):
         self.set_quote("6.30", "2026-10-16T13:45:00Z")
         self.assertEqual(evaluate_exit(self.position, self.snapshot).reasons, ("maximum_holding_time",))
-        self.set_quote("6.30", "2026-10-16T14:00:00Z")
+        self.set_quote("6.30", "2026-10-16T19:45:00Z")
         self.assertEqual(evaluate_exit(self.position, self.snapshot).reasons, ("session_end",))
+        self.set_quote("6.30", "2026-10-16T14:00:00Z")
+        self.assertEqual(evaluate_exit(self.position, self.snapshot, experimental()).reasons, ("session_end",))
 
     def test_forced_exit_still_requires_fresh_quote_and_fill_confirmation(self):
         result = evaluate_exit(self.position, self.snapshot, force_reason="daily_loss_limit")
@@ -315,3 +338,5 @@ class ExitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

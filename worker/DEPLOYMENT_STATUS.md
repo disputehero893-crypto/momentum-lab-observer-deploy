@@ -1,5 +1,24 @@
 # Observer deployment status
 
+## Current hosted state (read-only, 2026-11-15)
+
+The latest read-only Render status check reports `momentum-lab-observer` as
+**suspended / stuck_crashlooping**, tracking `main` with service auto-deploy off.
+The last recorded deployment remains the older **2026-10-19** runtime (short
+commit `4642714`); it does not include this draft branch's startup guard.
+The provider event query showed repeated `server_failed` / `nonZeroExit:1`
+events beginning October 29 and a subsequent suspension event. The queried
+crash-window logs returned no rows, and the high/recovered disk-event query was
+empty. Therefore the crash loop is confirmed, but disk exhaustion or a specific
+code cause is **not** confirmed by the available evidence.
+
+No restart, unsuspend, deployment, environment change, disk mutation, or journal
+write was performed. PR #20's source change only adds a fail-closed startup
+diagnostic; it does not establish the cause or restore the service. Preserve
+and back up the existing journal before any operator-approved capacity repair
+or restart.
+
+
 Latest price-history verification: **2026-10-19T00:29:45.57024+00:00**. Runtime **`d87a14221e530d59ec6674e4e140645a78ce87a8`** deployed as **`dep-dbam70c9v7es7392hn3g`**, live at **`2026-10-19T00:26:15.262905Z`**. Two owner-bound checks verified raw daily closes and ten completed regular-session minute intervals for each of AAPL, MSFT and SPY on IEX. The dated session was October 16; the New York collection date was the Sunday nontrading date October 18. Original source dates were retained while history request/receipt times and worker heartbeats advanced. Broker access remained Paper and read-only, execution remained disabled, and every requirements review remained incomplete.
 
 Earlier requirements-review verification: **2026-10-18T23:34:55.480933+00:00**. Runtime **`9b5e04b7f3451bc978e9236b3c9fde5c2b9e811f`** deployed successfully as **`dep-dbale8c9v7es738vs44g`**, live at **`2026-10-18T23:33:22.125324Z`**. The correct owner received the new selection requirements for AAPL, MSFT and SPY, with matching Market Watch collection times and advancing publication/receipt times. Broker access remained connected, Paper and read-only; execution remained disabled.

@@ -43,7 +43,7 @@ class TestCryptoConfig(unittest.TestCase):
     def test_opt_in_default_disabled(self):
         config = Config.from_env({})
         self.assertEqual(config.crypto_watchlist, ())
-        self.assertEqual(config.watchlist, ())
+        self.assertEqual(config.watchlist, ("AAPL", "MSFT", "SPY"))
         self.assertEqual(config.public()["crypto_watchlist"], [])
 
     def test_new_crypto_env_is_distinct_from_equities(self):

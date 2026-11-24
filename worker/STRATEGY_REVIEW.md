@@ -15,7 +15,7 @@ continues to use GET-only broker access and `execute=False`.
 
 | Requirement | Current evidence and behavior |
 | --- | --- |
-| Price range | Both the observed ask and last trade must be valid, fresh and within the configured inclusive range. The default is $2 through $20. |
+| Price range | Both the observed ask and last trade must be valid, fresh and within the configured inclusive range. The liquid IEX default is $5 through $1000. The gated small-cap preset keeps $2 through $20. |
 | Daily gain | Unavailable: a verified previous-session close and its provenance are not in Market Watch. |
 | Relative volume | Unavailable: the current cumulative volume and complete same-clock historical baseline are not in Market Watch. |
 | Float | Unavailable: no point-in-time float estimate is supplied. |
@@ -44,9 +44,10 @@ complete numeric or discretionary rule set used for every trade.
 
 `source_basis.thresholds_match` compares only `min_price`, `max_price`,
 `min_gain_pct`, `min_rvol` and `max_float_exclusive` with those named thresholds.
-The report separately compares all 27 current StrategyConfig fields against the
-default experiment. Changed field names are listed and the full validated
-configuration has its own SHA-256 `config_id`.
+The liquid IEX default does not match them. The report separately compares the
+original 27 pattern and threshold fields with the **active preset's** defaults.
+Changed field names are listed. The SHA-256 `config_id` covers the full
+validated configuration, including preset, universe and gate flags.
 
 Neither match flag establishes fidelity to the trader's complete or current
 practice, a historical test result, profitability, or approval to apply settings.
@@ -64,7 +65,7 @@ No schema migration is required.
 | Field | Meaning |
 | --- | --- |
 | `schema_version` / `kind` | `1.0` / `selection_requirements` |
-| `observation_only` / `profile` | `true` / `experimental_v1` |
+| `observation_only` / `profile` | `true` / the active preset profile (`liquid_large_cap_iex_v1` by default, `experimental_v1` for the gated small-cap preset) |
 | `config_id` | SHA-256 of the complete validated current strategy configuration |
 | `source_basis` | Named source threshold comparison, default-experiment comparison, and bounded changed-field lists |
 | `settings` | Current selection thresholds, freshness policies, RVOL convention, and experiment window |

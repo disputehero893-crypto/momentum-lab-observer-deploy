@@ -15,7 +15,7 @@ from urllib.request import Request, build_opener
 from .alpaca import NoRedirect
 from .journal import canonical_json
 from .market_observation import market_data_evidence, sanitize_market_watch
-from .strategy import StrategyConfig
+from .strategy import StrategyConfig, load_strategy
 from .strategy_review import build_strategy_review
 from .price_history import sanitize_price_history
 from .crypto_observation import sanitize_crypto_watch
@@ -252,7 +252,7 @@ class Publisher:
         self.max_data_age_seconds = _max_data_age(config.quote_max_age_seconds)
         self.watchlist, self.data_feed = tuple(config.watchlist), config.data_feed
         self.crypto_watchlist = tuple(config.crypto_watchlist)
-        self.strategy_config = StrategyConfig(**config.strategy_overrides)
+        self.strategy_config = load_strategy(config.strategy_overrides)
         self.transport = transport or self._http
         self.clock = clock or (lambda: datetime.now(UTC))
 

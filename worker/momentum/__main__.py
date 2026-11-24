@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import signal
 import threading
+import os
 from contextlib import contextmanager
 
 from .config import Config, ConfigError
@@ -38,6 +39,11 @@ def main(argv=None):
     observe = sub.add_parser("observe", help="Run GET-only paper observations; never submits or cancels orders")
     observe.add_argument("--once", action="store_true", help="Observe one bounded cycle, then stop")
     sub.add_parser("serve-observe", help="Run GET-only observations with the authenticated HTTP API")
+    autopilot = sub.add_parser("serve-autopilot", help="Run account-bound paper executor; starts paused until explicit activation")
+    autopilot.add_argument("--account-id", default=os.environ.get("AUTOPILOT_ACCOUNT_ID", ""),
+                           help="Verified paper broker account UUID, never an API key")
+    customer = sub.add_parser("serve-customer-paper", help="Opt-in owner-bound paper worker with authenticated customer controls")
+    customer.add_argument("--account-id", default=os.environ.get("AUTOPILOT_ACCOUNT_ID", ""))
     sub.add_parser("paper-preflight", help="Explicitly read paper account/calendar/data; never submits orders")
     publish = sub.add_parser("publish-demo", help="Insert an existing synthetic export in configured Supabase")
     publish.add_argument("--run-id", default="demo-v1")
@@ -62,6 +68,42 @@ def main(argv=None):
                     pass
                 finally:
                     server.server_close()
+        elif args.command in {"serve-autopilot", "serve-customer-paper"}:
+            from .autopilot import PaperAutopilot
+            if not config.control_token:
+                raise ConfigError("Autopilot requires server-side control authentication")
+            gateway = None
+            if args.command == "serve-customer-paper":
+                from .customer_runtime import build_customer_paper_runtime
+                from .customer_cloud import strict_json
+                try:
+                    raw = os.environ.get("CUSTOMER_REVIEWED_STRATEGIES_JSON", "{}").encode()
+                    if len(raw) > 16384:
+                        raise ValueError
+                    registry = strict_json(raw)
+                    if not isinstance(registry, dict):
+                        raise ValueError
+                except (ValueError, TypeError, UnicodeError, RecursionError):
+                    raise ConfigError("Invalid server-reviewed customer strategy registry") from None
+                config, runner, gateway = build_customer_paper_runtime(config,
+                    account_id=args.account_id,
+                    publishable_key=os.environ.get("SUPABASE_PUBLISHABLE_KEY", ""),
+                    expected_settings_version=os.environ.get("CUSTOMER_SETTINGS_VERSION", ""),
+                    reviewed_strategy_ids=registry)
+            else:
+                runner = PaperAutopilot(config, account_id=args.account_id)
+            with runner as worker, shutdown_signals(worker.stop_event):
+                server = make_server(config, Application(config, autopilot=worker, customer_gateway=gateway))
+                thread = threading.Thread(target=server.serve_forever, name="autopilot-api", daemon=True)
+                thread.start()
+                print("TactiRise paper autopilot service started; authorization and reconciliation gates apply", flush=True)
+                try:
+                    worker.run()
+                finally:
+                    worker.stop_event.set()
+                    server.shutdown()
+                    server.server_close()
+                    thread.join(timeout=2)
         elif args.command in {"observe", "serve-observe"}:
             from .observation import ObservationWorker
             with ObservationWorker(config) as worker, shutdown_signals(worker.stop_event):
@@ -116,4 +158,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

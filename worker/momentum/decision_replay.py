@@ -20,7 +20,7 @@ import sys
 import tempfile
 
 from .models import plain, timestamp
-from .strategy import StrategyConfig, evaluate_setup
+from .strategy import StrategyConfig, evaluate_setup, load_strategy
 
 
 MAX_INPUT_BYTES = 4 * 1024 * 1024
@@ -188,12 +188,19 @@ def _configuration(overrides):
         elif type(original) is int:
             if type(value) is not int:
                 raise ReplayError("strategy_config_invalid")
+        elif type(original) is bool:
+            if type(value) is not bool:
+                raise ReplayError("strategy_config_invalid")
+        elif isinstance(original, tuple):
+            if (not isinstance(value, list) or len(value) > 10
+                    or any(type(item) is not str or not 1 <= len(item) <= 10 for item in value)):
+                raise ReplayError("strategy_config_invalid")
         elif not isinstance(value, str) or not 1 <= len(value) <= 64:
             raise ReplayError("strategy_config_invalid")
         if key in {"trade_start_et", "trade_end_et"}:
             _check_time(value, clock=True, required=True)
     try:
-        return StrategyConfig(**overrides)
+        return load_strategy(overrides)
     except (ValueError, TypeError, ArithmeticError):
         raise ReplayError("strategy_config_invalid") from None
 

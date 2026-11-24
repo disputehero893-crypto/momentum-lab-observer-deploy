@@ -2,7 +2,7 @@
 
 This is a runnable synthetic replay, authenticated journal API, reusable **paper-only** session controller, and continuous **GET-only observation worker**. The default `serve` command runs the demo/local API; `serve-observe` adds actual provider observation and cloud status/halts after secure server provisioning. Neither starts broker order execution. There is no live trading mode or live execution host.
 
-The Render observer service is live with its persistent disk. Initial hosted verification passed: public liveness, unauthenticated private-request rejection, fresh GET-only Alpaca Paper observations and advancing owner-bound cloud status. User-provided screenshots also verified signed-in connection badges with trading disabled and the separate Blueprint Auto Sync setting off. The subsequent Market Watch deployment has now published actual IEX observations for all three approved symbols to the correct owner during a closed regular session. Active-session behavior, the signed-in Market Watch rendering, full operational acceptance and financial completeness remain open. [DEPLOYMENT_STATUS.md](DEPLOYMENT_STATUS.md) records actual hosted evidence, source/deploy IDs and the approved $7.25/month base hosting cost. Read [OBSERVATION.md](OBSERVATION.md) for runtime behavior and [LEDGER.md](LEDGER.md) for accounting revisions and completeness.
+Current read-only host check (2026-11-15): the Render observer is suspended with `stuck_crashlooping`; its latest known deployment is the older 2026-10-19 revision, and automatic deploys are off. Render events confirm repeated nonzero exits and suspension, but the crash-window logs and disk-high/recovery event queries returned no rows. The evidence confirms a crash loop, not a disk-full cause. The service and persistent journal were left untouched. Active hosted behavior, release acceptance and accounting completeness remain unverified. See [DEPLOYMENT_STATUS.md](DEPLOYMENT_STATUS.md) for the detailed current evidence and historical deployment receipts.
 
 The implemented [Market Watch](MARKET_WATCH.md) increment observes the approved connection-test symbols **AAPL, MSFT and SPY on IEX**. The default observer collects the current New York day's regular-session calendar and one bounded snapshot batch before optional accounting import. It does not require strategy metadata or historical-volume inputs to report quotes. `ACCOUNTING_HISTORY_START` remains blank, so accounting remains incomplete and authoritative fees/P&L remain unknown. The optional `worker_state.payload.market_watch` reports bounded provider observations; closed-session owner-bound delivery is separately verified in `DEPLOYMENT_STATUS.md`, while active-session data behavior and signed-in rendering remain to be checked.
 
@@ -43,6 +43,24 @@ The 16-scenario fixture currently requires the default strategy and risk setting
 The default replay contains two invented round trips and five fills. One entry progresses from 101 shares pending to 40 filled/61 pending, then 101 filled. A stale stop quote leaves all 101 shares exposed until a fresh quote is received. Other cases reject low relative volume, unknown float, wide spreads, missing reconciliation and halted entries. An emergency latch survives risk-state restoration.
 
 The fixture's gross arithmetic is $18.18 minus $12.12 = $6.06. An explicitly invented fee of $0.003 per share per side totals $1.212, producing $4.848 net. Its simulated ending equity is $10,004.848 from $10,000. These decimal strings should only be formatted for display; they must not be described as paper-account or live returns. No queue, venue depth, latency or market impact is modeled.
+
+
+
+## Observe mode (paper, orders off)
+
+Local / CI-safe checks (no broker, no arming):
+
+```sh
+cd worker
+python -m unittest discover -s tests -v
+node --test ../control-plane/core.test.mjs
+```
+
+Hosted observe uses `serve-observe` with `MOMENTUM_MODE=paper`,
+`ALPACA_DATA_FEED=iex`, `WATCHLIST=AAPL,MSFT,SPY`, and
+`PAPER_TRADING_ENABLED=false`. Do not flip trading on without Derek's yes in
+chat. Strategy defaults: [STRATEGY_PRESETS.md](STRATEGY_PRESETS.md). Paper run
+logging: [PAPER_RUN_LOGGING.md](PAPER_RUN_LOGGING.md).
 
 ## What is implemented
 
@@ -102,17 +120,21 @@ Remote resume is intentionally absent. An ordinary halt cannot downgrade a previ
 
 For a browser integration, `CORS_ORIGIN` must equal one exact approved origin. Other origins are rejected. Browser OPTIONS preflight is allowed for that origin without a bearer token and returns no private data; every subsequent GET/POST still authenticates. Use HTTPS termination on the host. Do not compile the worker control secret, broker keys, or a Supabase service-role key into frontend JavaScript. The current dashboard uses owner-scoped Supabase access and the checked-in demo, so it does not need this control secret.
 
+## Optional AI advisor (Gemini)
+
+Off by default. When enabled, Gemini reads chart images alongside the rule strategy, tags candidates `confluence`/`rules`/`ai`, and (in `cotrade` mode only, after re-review) may add capped AI-only paper candidates that still pass the same risk manager. See [AI_ADVISOR.md](AI_ADVISOR.md).
+
 ## Configuration and secret placement
 
 `.env.example` documents environment variable names. The worker does not auto-load dotenv files. Keep local secret files out of version control; use server environment/secret settings on a host. `.gitignore` and `.dockerignore` exclude credentials, runtime journals and operator metadata.
 
-The approved Market Watch configuration is `WATCHLIST=AAPL,MSFT,SPY`, `ALPACA_DATA_FEED=iex`, with the accounting-history anchor still blank. Quote observation does not require `SYMBOL_METADATA_PATH` or strategy history. The default quote freshness limit is two seconds for both the source event and actual HTTP receipt, independently of the thirty-second worker heartbeat. `POLL_SECONDS` defaults to five, so prices can legitimately age to stale between polls. Last-trade freshness is independent of bid/ask freshness; the dashboard must expire each against wall-clock time. Regular-session state uses current-day calendar evidence no more than five minutes old and becomes unknown when that evidence is unavailable. See [MARKET_WATCH.md](MARKET_WATCH.md) for the complete contract.
+The approved Market Watch configuration is `WATCHLIST=AAPL,MSFT,SPY`, `ALPACA_DATA_FEED=iex`, with the accounting-history anchor still blank. An omitted or empty `WATCHLIST` defaults to that same list. The default strategy preset is `liquid_large_cap_iex_v2`, so those names are inside the strategy universe. Quote observation does not require `SYMBOL_METADATA_PATH` or strategy history. The gated small-cap preset is separate and stays off; see [STRATEGY_PRESETS.md](STRATEGY_PRESETS.md). The default quote freshness limit is two seconds for both the source event and actual HTTP receipt, independently of the thirty-second worker heartbeat. `POLL_SECONDS` defaults to five, so prices can legitimately age to stale between polls. Last-trade freshness is independent of bid/ask freshness; the dashboard must expire each against wall-clock time. Regular-session state uses current-day calendar evidence no more than five minutes old and becomes unknown when that evidence is unavailable. See [MARKET_WATCH.md](MARKET_WATCH.md) for the complete contract.
 
 Required gates for any future submitted paper intention are all of:
 
 1. `MOMENTUM_MODE=paper` and `PAPER_TRADING_ENABLED=true`.
 2. Paper-account `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` in the worker environment.
-3. A reviewed `WATCHLIST`, `ALPACA_DATA_FEED=iex` or `sip`, and an existing `SYMBOL_METADATA_PATH` file. Missing/unknown facts still reject at the strategy gate.
+3. A reviewed `WATCHLIST` contained by the active preset's universe, and `ALPACA_DATA_FEED=iex` for the default liquid preset. The gated small-cap preset additionally requires SIP, `enable_gated_presets`, and an existing `SYMBOL_METADATA_PATH` file. Missing float or catalyst facts reject only when that preset is the one actually evaluating the setup.
 4. `PAPER_REVIEWED_CONFIG_HASH` equal to the exact current hash shown by `python -m momentum readiness`. That hash covers the complete effective strategy/risk settings, watchlist, feed, order timing, order type and fixed execution host. Changing those settings invalidates it. Review the effective rules and budgets before recording this acknowledgment.
 5. The persistent journal lease, fresh complete account/order/position reconciliation, a complete current session P&L/fee ledger, current quote/intent, and no blocking operational or risk latch.
 6. An integration explicitly calling `PaperSession.cycle(..., execute=True)`. No shipped CLI or HTTP command makes that call.

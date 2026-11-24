@@ -110,7 +110,7 @@ class StrategyReviewTests(unittest.TestCase):
         self.assertEqual(review["settings"], {
             "min_price": "1.25", "max_price": "15", "min_gain_pct": "12", "min_rvol": "6",
             "max_float_exclusive": 5_000_000, "rvol_sessions": 30, "rvol_session_start_et": "04:00",
-            "max_float_age_days": 4, "max_catalyst_age_hours": 12, "catalyst_required": True,
+            "max_float_age_days": 4, "max_catalyst_age_hours": 12, "catalyst_required": False,
             "max_quote_age_seconds": "1.25", "trade_start_et": "08:15", "trade_end_et": "09:45"})
         self.assertEqual(review["experimental_window"]["state"], "outside")
         self.assertFalse(review["source_basis"]["thresholds_match"])
@@ -118,7 +118,7 @@ class StrategyReviewTests(unittest.TestCase):
                          ["min_price", "max_price", "min_gain_pct", "min_rvol", "max_float_exclusive"])
 
     def test_pattern_change_is_distinct_from_matching_numeric_instructional_thresholds(self):
-        cfg = StrategyConfig(target_r="3", max_entry_chase="0.02")
+        cfg = StrategyConfig.small_cap_catalyst(target_r="3", max_entry_chase="0.02")
         review = build_strategy_review(invented_watch(), cfg, now=NOW)
         self.assertTrue(review["source_basis"]["thresholds_match"])
         self.assertEqual(review["source_basis"]["differing_threshold_fields"], [])

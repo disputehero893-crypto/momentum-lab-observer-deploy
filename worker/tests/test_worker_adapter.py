@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 from momentum.alpaca import PaperClient, PaperDisabled, BrokerError, AmbiguousSubmission, NoRedirect
 from momentum.journal import Journal
 from momentum.risk import RiskManager
-from momentum.strategy import evaluate_setup
+from momentum.strategy import evaluate_setup, load_strategy
 from worker_fakes import armed_config, FakeVenue
 
 
@@ -14,7 +14,8 @@ def approved(venue):
     snapshot = venue.snapshot()
     account = {"equity": "10000", "buying_power": "10000", "realized_pnl": "0", "unrealized_pnl": "0",
                "fees": "0", "position_qty": 0, "open_order_qty": 0, "session_date": "2026-10-16", "as_of": snapshot["now"]}
-    intent = RiskManager().assess(evaluate_setup(snapshot).intent, account, snapshot["quote"], snapshot["now"],
+    setup = evaluate_setup(snapshot, load_strategy(venue.client.config.strategy_overrides))
+    intent = RiskManager().assess(setup.intent, account, snapshot["quote"], snapshot["now"],
                                   connected=True, reconciled=True).intent
     return intent, snapshot["quote"]
 
