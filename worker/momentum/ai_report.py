@@ -35,12 +35,15 @@ def load_records(path: str | Path) -> list[dict[str, Any]]:
 
 
 def _bucket() -> dict[str, Any]:
-    return {"verdicts": 0, "trades": 0, "wins": 0, "r_total": 0.0, "r_count": 0}
+    return {"verdicts": 0, "trades": 0, "wins": 0, "unknown": 0, "r_total": 0.0, "r_count": 0}
 
 
 def _finish(bucket: Mapping[str, Any]) -> dict[str, Any]:
+    # `trades` counts only outcomes whose win is exactly true or false.
+    # A missing or non-boolean win stays unknown and is not a zero win rate.
     trades = bucket["trades"]
     return {"verdicts": bucket["verdicts"], "trades": trades, "wins": bucket["wins"],
+            "unknown": bucket["unknown"],
             "win_rate": round(bucket["wins"] / trades, 4) if trades else None,
             "avg_r": round(bucket["r_total"] / bucket["r_count"], 4) if bucket["r_count"] else None}
 
@@ -81,8 +84,15 @@ def build_report(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             b = tables[table].setdefault(key, _bucket())
             b["verdicts"] += 1
             if o is not None:
-                b["trades"] += 1
-                b["wins"] += 1 if o.get("win") is True else 0
+                win = o.get("win")
+                if win is True or win is False:
+                    b["trades"] += 1
+                    if win is True:
+                        b["wins"] += 1
+                else:
+                    # None, a missing flag, or a non-boolean such as 0 is unknown.
+                    # It must not increment trades or wins (that would make the rate 0).
+                    b["unknown"] += 1
                 r = o.get("r_multiple")
                 if isinstance(r, (int, float)) and not isinstance(r, bool):
                     b["r_total"] += float(r)
@@ -91,7 +101,10 @@ def build_report(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
               "matched": sum(1 for sid in candidates if sid in outcomes), "signals": signals}
     report.update({name: {k: _finish(v) for k, v in sorted(rows.items())} for name, rows in tables.items()})
     report["note"] = ("Sources: confluence = rules and AI agreed, rules = rules only, ai = AI only. "
-                      "Outcomes use the exit intent's bid before fill; small samples are noise.")
+                      "Outcomes use the exit intent's bid before fill; small samples are noise. "
+                      "An outcome whose win is not exactly true or false stays unknown and is left "
+                      "out of the win rate. A missing R multiple stays out of the average. Neither "
+                      "is stored as zero. This report is not evidence of profitability.")
     return report
 
 
@@ -104,11 +117,13 @@ def render_text(report: Mapping[str, Any]) -> str:
     for title, key in (("By source (rules vs AI vs confluence)", "by_source"), ("By AI pattern", "by_pattern"),
                        ("By source and pattern", "by_source_and_pattern"), ("By AI call", "by_ai_call")):
         out.append(f"{title}:")
-        out.append(f"  {'label':<28}{'cands':>7}{'trades':>8}{'wins':>6}{'win%':>8}{'avg R':>8}")
+        out.append(f"  {'label':<28}{'cands':>7}{'trades':>8}{'wins':>6}{'unk':>6}{'win%':>8}{'avg R':>8}")
         for label, row in report[key].items():
             win = f"{row['win_rate'] * 100:.0f}%" if row["win_rate"] is not None else "-"
             avg = f"{row['avg_r']:.2f}" if row["avg_r"] is not None else "-"
-            out.append(f"  {label:<28}{row['verdicts']:>7}{row['trades']:>8}{row['wins']:>6}{win:>8}{avg:>8}")
+            unknown = row.get("unknown", 0)
+            out.append(f"  {label:<28}{row['verdicts']:>7}{row['trades']:>8}{row['wins']:>6}"
+                       f"{unknown:>6}{win:>8}{avg:>8}")
         out.append("")
     out.append(report["note"])
     return "\n".join(out)

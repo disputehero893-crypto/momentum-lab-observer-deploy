@@ -692,7 +692,7 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((report["candidates"], report["outcomes"], report["matched"]), (4, 3, 3))
         self.assertEqual(report["signals"], {"total": 3, "ok": 1, "invalid": 1, "error": 1, "calls": {"buy": 1}})
         self.assertEqual(report["by_source"]["confluence"], {"verdicts": 1, "trades": 1, "wins": 1,
-                                                             "win_rate": 1.0, "avg_r": 2.0})
+                                                             "unknown": 0, "win_rate": 1.0, "avg_r": 2.0})
         self.assertEqual(report["by_pattern"]["breakout"]["trades"], 2)
         self.assertEqual(report["by_pattern"]["breakout"]["win_rate"], 0.5)
         self.assertEqual(report["by_source_and_pattern"]["ai/bull_flag"]["trades"], 0)

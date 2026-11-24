@@ -54,3 +54,9 @@ services:
         value: ""
       - key: ACCOUNTING_COST_POLICY
         value: actual
+      # Telemetry sampling and the free-space floor. Defaults match the code.
+      # They do not delete existing journal rows.
+      - key: JOURNAL_SAMPLE_SECONDS
+        value: "60"
+      - key: JOURNAL_MIN_FREE_MB
+        value: "64"

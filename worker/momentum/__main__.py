@@ -10,9 +10,54 @@ from contextlib import contextmanager
 
 from .config import Config, ConfigError
 from .demo import run_demo
-from .journal import Journal
+from .journal import Journal, canonical_json
 from .lease import WorkerLease
 from .server import Application, make_server
+
+
+def _serve_configuration_degraded():
+    """Stay listening when configuration is invalid so a bad env cannot crash-loop."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import urlsplit
+    host = os.environ.get("HOST", "0.0.0.0") or "0.0.0.0"
+    try:
+        port = int(os.environ.get("PORT", "10000"))
+    except ValueError:
+        port = 10000
+    body = canonical_json({
+        "status": "degraded", "service": "momentum-lab", "execution_disabled": True,
+        "paper_trading_enabled": False, "paper_execution_running": False,
+        "live_execution_supported": False, "orders_submitted": 0,
+        "journal_status": "unopened", "startup_error": "configuration_invalid",
+        "quarantined_payloads": None,
+    }).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            return
+
+        def do_GET(self):
+            if urlsplit(self.path).path != "/health":
+                self.send_response(503)
+            else:
+                self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"Momentum Lab listening on {host}:{port}; configuration invalid; execution disabled", flush=True)
+    stop = threading.Event()
+    with shutdown_signals(stop):
+        thread = threading.Thread(target=server.serve_forever, name="degraded-health", daemon=True)
+        thread.start()
+        stop.wait()
+    server.shutdown()
+    server.server_close()
+    thread.join(timeout=2)
+    return 0
 
 
 @contextmanager
@@ -45,11 +90,21 @@ def main(argv=None):
     customer = sub.add_parser("serve-customer-paper", help="Opt-in owner-bound paper worker with authenticated customer controls")
     customer.add_argument("--account-id", default=os.environ.get("AUTOPILOT_ACCOUNT_ID", ""))
     sub.add_parser("paper-preflight", help="Explicitly read paper account/calendar/data; never submits orders")
+    archive = sub.add_parser("archive-journal",
+                             help="Export old journal rows to gzip NDJSON without deleting them")
+    archive.add_argument("--older-than-days", type=int, required=True)
+    archive.add_argument("--output", required=True, help="Destination path, or - for stdout")
     publish = sub.add_parser("publish-demo", help="Insert an existing synthetic export in configured Supabase")
     publish.add_argument("--run-id", default="demo-v1")
     args = parser.parse_args(argv)
     try:
         config = Config.from_env()
+    except ConfigError as exc:
+        if args.command == "serve-observe":
+            return _serve_configuration_degraded()
+        print(f"Worker stopped: {exc}", file=sys.stderr)
+        return 2
+    try:
         if args.command == "demo":
             with WorkerLease(config.db_path):
                 result = run_demo(config, run_id=args.run_id)
@@ -104,29 +159,66 @@ def main(argv=None):
                     server.shutdown()
                     server.server_close()
                     thread.join(timeout=2)
-        elif args.command in {"observe", "serve-observe"}:
+        elif args.command == "observe":
             from .observation import ObservationWorker
             with ObservationWorker(config) as worker, shutdown_signals(worker.stop_event):
-                server = None
-                thread = None
-                if args.command == "serve-observe":
-                    server = make_server(config, Application(config, observation_worker=worker))
-                    thread = threading.Thread(target=server.serve_forever, name="observation-api", daemon=True)
-                    thread.start()
                 print("Paper observation started; broker transport is GET-only; execution disabled", flush=True)
                 try:
                     count = worker.run(max_cycles=1 if getattr(args, "once", False) else None)
                     last = worker.state()["latest_cycle"] or {}
                     print(json.dumps({"observation_cycles": count, "execution_enabled": False,
                                       "orders_submitted": 0, "last_error_code": last.get("error_code")}))
-                    if args.command == "observe" and args.once and last.get("error_code"):
+                    if args.once and last.get("error_code"):
                         return 2
                 finally:
                     worker.stop_event.set()
-                    if server is not None:
-                        server.shutdown()
-                        server.server_close()
-                        thread.join(timeout=2)
+        elif args.command == "serve-observe":
+            # Listen on /health before opening the journal or talking to the
+            # broker. A full, malformed, or unreadable journal must leave the
+            # process listening and must not delete stored rows.
+            import sqlite3
+            from .observation import ObservationError, ObservationWorker
+            app = Application(config, defer_journal=True)
+            server = make_server(config, app)
+            thread = threading.Thread(target=server.serve_forever, name="observation-api", daemon=True)
+            thread.start()
+            print(f"Momentum Lab listening on {config.host}:{server.server_port}; execution disabled", flush=True)
+            stop = threading.Event()
+
+            def _degraded(code):
+                app.startup_error = code
+                print("Observation degraded: " + code + "; journal preserved; execution disabled", flush=True)
+                stop.wait()
+
+            try:
+                with shutdown_signals(stop):
+                    app.open_journal()
+                    if app.journal_status != "writable":
+                        _degraded(app.startup_error or "journal_not_writable")
+                    else:
+                        try:
+                            with ObservationWorker(config, journal=app.journal) as worker:
+                                app.observation_worker = worker
+                                bridge = threading.Thread(
+                                    target=lambda: (stop.wait(), worker.stop_event.set()),
+                                    name="observation-stop", daemon=True)
+                                bridge.start()
+                                print("Paper observation started; broker transport is GET-only; execution disabled", flush=True)
+                                worker.run()
+                        except (ObservationError, sqlite3.Error, OSError, Exception) as exc:
+                            text = str(exc)
+                            if "journal_volume_full" in text:
+                                code = "journal_volume_full_grow_the_disk_or_free_space"
+                            elif isinstance(exc, ObservationError) and text and len(text) <= 120 and " " not in text:
+                                code = text
+                            else:
+                                code = "observation_startup_failed"
+                            _degraded(code)
+            finally:
+                stop.set()
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
         elif args.command == "paper-preflight":
             from .observation import ReadOnlyPaperClient
             from .data import SnapshotBuilder
@@ -143,6 +235,11 @@ def main(argv=None):
                           "orders_submitted": 0, "reconciliation_complete": False,
                           "note": "Endpoint reads alone do not establish strategy ownership or launch readiness."}
                 print(json.dumps(result, indent=2))
+        elif args.command == "archive-journal":
+            receipt = Journal(config.db_path).archive_older_than(
+                args.output, older_than_days=args.older_than_days)
+            stream = sys.stderr if args.output == "-" else sys.stdout
+            print(json.dumps(receipt), file=stream)
         elif args.command == "publish-demo":
             from .publisher import Publisher
             row = Journal(config.db_path).event_by_key(f"demo:{args.run_id}:complete")

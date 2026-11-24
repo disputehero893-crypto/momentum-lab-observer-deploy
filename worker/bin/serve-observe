@@ -1,2 +1,8 @@
 #!/bin/sh
-exec python -m momentum.container_entrypoint serve-observe "$@"
+# The image ENTRYPOINT is `python -m momentum.container_entrypoint` and is
+# unchanged. This launcher is the same command for a shell: prefer `python`
+# (what the image provides) and use `python3` only when `python` is absent.
+if command -v python >/dev/null 2>&1; then
+  exec python -m momentum.container_entrypoint serve-observe "$@"
+fi
+exec python3 -m momentum.container_entrypoint serve-observe "$@"
