@@ -3,6 +3,8 @@ import unittest
 from decimal import Decimal as D
 
 from momentum.paper_risk import (
+    CRYPTO_PAPER_FEED,
+    CRYPTO_PAPER_PAIRS,
     DEFAULT_FEED,
     FOREX_PRACTICE_FEED,
     PaperIntent,
@@ -142,6 +144,33 @@ class PaperRiskTests(unittest.TestCase):
         )
         equity_on_fx_feed = check_paper_intent(self.intent, self.state, limits)[1]
         self.assertEqual(equity_on_fx_feed, "non_iex_feed_rejected")
+
+    def test_crypto_pairs_use_the_paper_crypto_feed_and_allow_fractional_qty(self):
+        self.assertEqual(CRYPTO_PAPER_PAIRS, frozenset({"BTC/USD", "ETH/USD", "SOL/USD"}))
+        btc = PaperIntent("BTC/USD", D("0.015"), D("64000"), "mlab_btc0001ab")
+        limits = RiskLimits(
+            max_order_notional=D("1000"), max_total_exposure=D("5000"), feed=CRYPTO_PAPER_FEED,
+        )
+        self.assertEqual(
+            check_paper_intent(btc, self.state, limits),
+            (True, "approved_for_paper_only"),
+        )
+        self.assertEqual(
+            check_paper_intent(btc, self.state)[1],
+            "non_paper_crypto_feed_rejected",
+        )
+        self.assertEqual(
+            check_paper_intent(btc, self.state, RiskLimits(feed=FOREX_PRACTICE_FEED))[1],
+            "non_paper_crypto_feed_rejected",
+        )
+        forex_on_crypto = check_paper_intent(
+            PaperIntent("EUR/USD", D("10"), D("1.08"), "fx-002"),
+            self.state,
+            limits,
+        )[1]
+        self.assertEqual(forex_on_crypto, "non_practice_forex_feed_rejected")
+        equity_on_crypto = check_paper_intent(self.intent, self.state, limits)[1]
+        self.assertEqual(equity_on_crypto, "non_iex_feed_rejected")
 
 
 if __name__ == "__main__":

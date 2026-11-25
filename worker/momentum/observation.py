@@ -335,6 +335,22 @@ class ObservationWorker:
         except (ValueError, TypeError, KeyError, ArithmeticError, UnicodeError, RecursionError):
             return None
 
+    def _maybe_crypto_paper(self, watch):
+        """Run one paper-crypto decision. A false flag leaves the cycle unchanged."""
+        if getattr(self.config, "crypto_paper_execution_enabled", False) is not True:
+            return None
+        try:
+            from .crypto_paper_loop import CryptoPaperLoop
+            if getattr(self, "_crypto_paper_loop", None) is None:
+                self._crypto_paper_loop = CryptoPaperLoop(
+                    self.config, journal=self.journal, clock=self.clock,
+                    transport=getattr(self, "crypto_order_transport", None))
+            return self._crypto_paper_loop.cycle(watch)
+        except Exception:
+            return {"enabled": True, "orders_submitted": 0,
+                    "skipped": "crypto_paper_cycle_failed", "decisions": [],
+                    "host": "paper-api.alpaca.markets", "live_execution_supported": False}
+
     def _forex_state(self, report, *, now):
         if report is None or not self.config.forex_watchlist:
             return None
@@ -439,6 +455,12 @@ class ObservationWorker:
                 result["crypto_watch"] = self._crypto_state(result["crypto_watch"], now=self.clock())
             if "forex_watch" in result:
                 result["forex_watch"] = self._forex_state(result["forex_watch"], now=self.clock())
+            # Equity observation stays execute=False. Crypto orders are a separate
+            # step and only run when CRYPTO_PAPER_EXECUTION_ENABLED is true.
+            crypto_paper = self._maybe_crypto_paper(
+                result.get("crypto_watch") if "crypto_watch" in result else None)
+            if crypto_paper is not None:
+                result["crypto_paper"] = crypto_paper
             result["blockers"] = sorted(set(result["blockers"]))
             result["acknowledged_commands"] = sorted(set(result["acknowledged_commands"]))
             if self.publisher is not None:

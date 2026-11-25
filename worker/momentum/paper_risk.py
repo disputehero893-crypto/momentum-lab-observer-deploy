@@ -16,6 +16,10 @@ from decimal import Decimal, InvalidOperation
 # Default feed label for docs/telemetry. RiskLimits does not fetch market data.
 DEFAULT_FEED = "iex"
 FOREX_PRACTICE_FEED = "oanda_practice"
+# Alpaca US spot pairs only. These also match the 3-letter forex regex, so the
+# screen classifies them as crypto before forex.
+CRYPTO_PAPER_FEED = "alpaca_crypto_paper"
+CRYPTO_PAPER_PAIRS = frozenset({"BTC/USD", "ETH/USD", "SOL/USD"})
 _FOREX_PAIR = re.compile(r"^[A-Z]{3}[_/][A-Z]{3}$")
 
 
@@ -59,9 +63,14 @@ def check_paper_intent(
 ) -> tuple[bool, str]:
     """Screen entries only; never use this function to block protective exits."""
     symbol = getattr(intent, "symbol", "")
-    is_forex = isinstance(symbol, str) and _FOREX_PAIR.fullmatch(symbol.strip().upper()) is not None
+    normalized = symbol.strip().upper() if isinstance(symbol, str) else ""
+    is_crypto = normalized in CRYPTO_PAPER_PAIRS
+    is_forex = (not is_crypto) and isinstance(symbol, str) and _FOREX_PAIR.fullmatch(normalized) is not None
     feed = getattr(limits, "feed", DEFAULT_FEED)
-    if is_forex:
+    if is_crypto:
+        if feed != CRYPTO_PAPER_FEED:
+            return False, "non_paper_crypto_feed_rejected"
+    elif is_forex:
         if feed != FOREX_PRACTICE_FEED:
             return False, "non_practice_forex_feed_rejected"
     elif feed != DEFAULT_FEED:
