@@ -56,6 +56,8 @@ class Config:
     data_feed: str = "iex"
     watchlist: tuple = ()
     crypto_watchlist: tuple = ()  # optional read-only spot crypto, never stock strategy inputs
+    # Separate from observation. Default false leaves crypto watch-only.
+    crypto_paper_execution_enabled: bool = False
     oanda_practice_api_token: str = field(default="", repr=False)
     oanda_practice_account_id: str = field(default="", repr=False)
     oanda_environment: str = ""
@@ -89,6 +91,8 @@ class Config:
     def __post_init__(self):
         if self.mode not in {"demo", "paper"}:
             raise ConfigError("MOMENTUM_MODE must be demo or paper; live execution is not implemented")
+        if type(self.crypto_paper_execution_enabled) is not bool:
+            raise ConfigError("CRYPTO_PAPER_EXECUTION_ENABLED must be true or false")
         if self.data_feed not in {"iex", "sip"}:
             raise ConfigError("ALPACA_DATA_FEED must be iex or sip")
         if len(self.watchlist) > 10 or any(not SYMBOL.fullmatch(s) for s in self.watchlist):
@@ -96,9 +100,10 @@ class Config:
         if self.crypto_watchlist:
             try:
                 from .crypto_observation import _pairs
+                from .paper_risk import CRYPTO_PAPER_PAIRS
                 _pairs(self.crypto_watchlist)
                 # This first implementation is restricted to reviewed US spot pairs.
-                if any(p not in {"BTC/USD", "ETH/USD", "SOL/USD"} for p in self.crypto_watchlist):
+                if any(p not in CRYPTO_PAPER_PAIRS for p in self.crypto_watchlist):
                     raise ValueError
             except (TypeError, ValueError) as exc:
                 raise ConfigError("CRYPTO_WATCHLIST must contain 1-10 unique uppercase USD crypto pairs") from exc
@@ -186,6 +191,7 @@ class Config:
                 data_feed=env.get("ALPACA_DATA_FEED", "iex"),
                 watchlist=_watchlist(env.get("WATCHLIST", "")),
                 crypto_watchlist=tuple(s.strip().upper() for s in env.get("CRYPTO_WATCHLIST", "").split(",") if s.strip()),
+                crypto_paper_execution_enabled=flag(env.get("CRYPTO_PAPER_EXECUTION_ENABLED"), "CRYPTO_PAPER_EXECUTION_ENABLED"),
                 oanda_practice_api_token=env.get("OANDA_PRACTICE_API_TOKEN", ""),
                 oanda_practice_account_id=env.get("OANDA_PRACTICE_ACCOUNT_ID", ""),
                 oanda_environment=env.get("OANDA_ENVIRONMENT", "").strip().lower(),
@@ -243,6 +249,8 @@ class Config:
                 reasons.append("oanda_environment_not_practice")
             if not self.oanda_practice_api_token or not self.oanda_practice_account_id:
                 reasons.append("oanda_practice_credentials_missing")
+        if self.crypto_paper_execution_enabled and not self.crypto_watchlist:
+            reasons.append("crypto_watchlist_missing")
         if self.paper_reviewed_config_hash != self.review_hash():
             reasons.append("exact_paper_configuration_not_reviewed")
         return reasons
@@ -270,6 +278,15 @@ class Config:
                 "rest_host": "api-fxpractice.oanda.com",
                 "forex_risk_config_id": ForexRiskConfig(**self.forex_risk_overrides).config_id,
             }
+        # Off by default, and absent from the hash until armed, so a crypto
+        # watchlist alone still matches today's reviewed equity configuration.
+        if self.crypto_paper_execution_enabled:
+            settings["crypto_paper_orders"] = {
+                "enabled": True,
+                "execution_host": PAPER_API_HOST,
+                "pairs": list(self.crypto_watchlist),
+                "time_in_force": ["gtc", "ioc"],
+            }
         return sha256(json.dumps(settings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def public(self):
@@ -278,6 +295,8 @@ class Config:
             "paper_host": PAPER_API_HOST, "data_host": DATA_API_HOST, "data_feed": self.data_feed,
             "paper_credentials_present": bool(self.api_key and self.api_secret),
             "watchlist": list(self.watchlist), "crypto_watchlist": list(self.crypto_watchlist),
+            "crypto_paper_execution_enabled": bool(self.crypto_paper_execution_enabled),
+            "crypto_paper_order_host": PAPER_API_HOST,
             "forex_watchlist": list(self.forex_watchlist),
             "oanda_practice_configured": bool(self.oanda_practice_api_token and self.oanda_practice_account_id),
             "oanda_environment": self.oanda_environment or None,
