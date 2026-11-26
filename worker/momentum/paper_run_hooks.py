@@ -41,11 +41,100 @@ def start_session(worker):
         return None
 
 
+def _feed_state(worker, logger):
+    """Per-run dedupe memory so unchanged skips/blockers are not re-written every cycle."""
+    state = getattr(worker, "_paper_feed_state", None)
+    if not isinstance(state, dict) or state.get("run_key") != logger.run_key:
+        state = {"run_key": logger.run_key, "blockers": None, "skip": {}}
+        worker._paper_feed_state = state
+    return state
+
+
+def _window_payload(decision):
+    window = decision.get("window") if isinstance(decision.get("window"), list) else []
+    window = window[-8:]
+    payload = {
+        "window": window,
+        "window_start": window[0].get("t") if window and isinstance(window[0], dict) else None,
+        "window_end": window[-1].get("t") if window and isinstance(window[-1], dict) else None,
+    }
+    for key in ("bid", "ask", "mid", "quote_at"):
+        if decision.get(key) is not None:
+            payload[key] = decision.get(key)
+    return payload
+
+
+def record_crypto_paper(worker, logger, result):
+    """Write crypto paper signal/entry/exit/stop/skip events. Raises on write failure."""
+    crypto = result.get("crypto_paper")
+    if not isinstance(crypto, dict):
+        return
+    state = _feed_state(worker, logger)
+    run_key = logger.run_key
+    cycle_id = str(result.get("cycle_id") or "unknown")
+    at = result.get("completed_at")
+    skipped = crypto.get("skipped")
+    if skipped:
+        if state["skip"].get("*") != skipped:
+            logger.log_trade_event("skip", payload={
+                "symbol": None, "asset_class": "crypto", "reason": str(skipped),
+                "blockers": [str(b) for b in (crypto.get("blockers") or [])][:20],
+            }, event_key="skip:" + run_key + ":*:" + cycle_id, occurred_at=at)
+            state["skip"]["*"] = skipped
+        return
+    state["skip"].pop("*", None)
+    for index, decision in enumerate(crypto.get("decisions") or []):
+        if not isinstance(decision, dict):
+            continue
+        pair = decision.get("pair")
+        action = decision.get("action")
+        reason = str(decision.get("reason") or "unknown")
+        base = {"symbol": pair, "asset_class": "crypto", "rule": decision.get("rule"),
+                "reason": reason, **_window_payload(decision)}
+        if action in {"buy", "sell"}:
+            order_id = str(decision.get("client_order_id") or (cycle_id + ":" + str(index)))
+            signal = dict(base, side=action, pattern=reason, price=decision.get("price"))
+            logger.log_trade_event("signal", payload=signal,
+                                   event_key="signal:" + run_key + ":" + order_id, occurred_at=at)
+            kind = "entry" if action == "buy" else ("stop" if reason == "stop_hit" else "exit")
+            trade = dict(base, side=action, pattern=reason)
+            for key in ("qty", "price", "stop_price", "entry_price", "pnl", "client_order_id"):
+                if decision.get(key) is not None:
+                    trade[key] = decision.get(key)
+            logger.log_trade_event(kind, payload=trade,
+                                   event_key=kind + ":" + run_key + ":" + order_id, occurred_at=at)
+            state["skip"].pop(pair, None)
+        elif decision.get("intent") in {"buy", "sell"}:
+            # The rule fired but the paper order was refused before or at submit.
+            pattern = str(decision.get("signal_reason") or "unknown")
+            key = run_key + ":" + str(pair) + ":" + cycle_id
+            logger.log_trade_event("signal", payload=dict(base, side=decision["intent"], pattern=pattern),
+                                   event_key="signal:" + key, occurred_at=at)
+            logger.log_trade_event("skip", payload=dict(base, side=decision["intent"], pattern=pattern,
+                                                        order_refused=True),
+                                   event_key="skip:" + key, occurred_at=at)
+            state["skip"][pair] = reason
+        else:
+            if state["skip"].get(pair) == reason:
+                continue
+            logger.log_trade_event("skip", payload=base,
+                                   event_key="skip:" + run_key + ":" + str(pair) + ":" + cycle_id, occurred_at=at)
+            state["skip"][pair] = reason
+
+
 def record_cycle(worker, result):
     logger = getattr(worker, "paper_run_logger", None)
     if logger is None or not getattr(logger, "enabled", False) or not getattr(logger, "run_id", None):
         return
     try:
+        # Trade events first: they matter most. Any write failure stops the rest
+        # of this cycle's writes so a slow Supabase cannot stall the loop further.
+        record_crypto_paper(worker, logger, result)
+    except Exception as exc:
+        LOG.warning("paper run trade-event logging failed: %s", type(exc).__name__)
+        return
+    try:
+        state = _feed_state(worker, logger)
         cycle_id = result.get("cycle_id") or "unknown"
         status = "error" if result.get("error_code") else ("halted" if result.get("halted") else "observing")
         logger.log_heartbeat(
@@ -58,7 +147,11 @@ def record_cycle(worker, result):
             event_key="heartbeat:" + logger.run_key + ":" + cycle_id,
             occurred_at=result.get("completed_at"),
         )
-        for blocker in result.get("blockers") or []:
+        blockers = sorted(str(b) for b in (result.get("blockers") or []))
+        # Only write blockers when the set changes; unchanged sets were the
+        # bulk of paper_events growth (about 6 rows per cycle).
+        logged_blockers = blockers if blockers != state.get("blockers") else []
+        for blocker in logged_blockers:
             reason = _map_blocker(blocker)
             logger.log_blocker(
                 reason,
@@ -66,6 +159,7 @@ def record_cycle(worker, result):
                 event_key="blocker:" + logger.run_key + ":" + cycle_id + ":" + str(blocker)[:80],
                 occurred_at=result.get("completed_at"),
             )
+        state["blockers"] = blockers
         session = result.get("session") or {}
         for index, decision in enumerate(session.get("decisions") or []):
             symbol = decision.get("symbol")
