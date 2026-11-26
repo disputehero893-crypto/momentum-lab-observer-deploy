@@ -19,3 +19,7 @@ A full-disk write of `observation_started` is recorded as `disk.last_write_error
 `Journal.__init__` still raises on a full volume. The one-shot `observe` command does not catch that, so an open failure there can still exit 1. The service command is `serve-observe`.
 
 Do not resume a disk-full image by deleting `momentum.sqlite3`. Copy an existing snapshot aside first. `archive-journal` can export old rows after the file is readable. It does not prune them. Free space has to come from growing the volume or from an operator action outside this process.
+
+## Switching to serve-paper without editing the start command
+
+Set `WORKER_RUNTIME=serve-paper` on the service. With the start command still `serve-observe`, the entrypoint starts `serve-paper` instead (same process, journal and gates). Remove the value (or set `serve-observe`) to return to observation. Any other value refuses to start.

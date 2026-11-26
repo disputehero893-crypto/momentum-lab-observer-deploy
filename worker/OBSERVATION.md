@@ -65,6 +65,7 @@ The worker does not load `.env` automatically. Provision values in the host's en
 | `POLL_SECONDS` | Five seconds by default; not a guarantee of cycle or halt latency. Quotes may age beyond their independent two-second freshness limit between polls. |
 | `ACCOUNTING_HISTORY_START` | Explicit, timezone-qualified history anchor. Still blank for this increment: import is skipped and accounting remains incomplete. |
 | `ACCOUNTING_BASELINE_PATH` | Optional reviewed opening inventory at that exact anchor, bound to the account and paper environment. |
+| `ACCOUNTING_BASELINE_AUTO` | `true` proves an EMPTY opening inventory from the broker only when the activity scan since the start is exhausted with no blockers and holds no fills/fees (any asset class), and the account has zero positions and zero open orders. The proof is written once to `accounting-baseline.auto.json` beside the journal and reused only for the same account and start; otherwise `opening_inventory_unproven` stays. In the review hash when enabled. Cannot be combined with `ACCOUNTING_BASELINE_PATH`. |
 | `ACCOUNTING_COST_POLICY` | `actual` by default. The separately named `paper_zero_fee_simulation` is an explicit simulation assumption, never proof of actual zero costs. |
 
 Cloud settings are all-or-none for this runtime. A partial URL/key/owner configuration is rejected. Provider credentials can be absent for a diagnostic start, but account observation then fails and reports disconnected. Neither configuration presence nor the prior saved link produces a connected state.
@@ -207,3 +208,7 @@ ENOSPC and known full-volume SQLite failures during `Journal` construction are s
 reported as `journal_volume_full_grow_the_disk_or_free_space`. This path does not
 delete, truncate, recreate, or repair the persistent journal. A full disk still needs
 operator-approved free space before new rows will fit. Existing rows stay in place.
+
+## Bound paper account
+
+On every account bind the worker records `{account_id, account_number}` in the journal (`observation_account_identity`) and logs, and `/health` shows it as `paper_account` (non-secret) so the operator can confirm the intended paper account.
