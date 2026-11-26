@@ -23,6 +23,7 @@ from .market_observation import (MarketWatchCollector, market_data_evidence,
                                  market_watch_from_snapshots, sanitize_market_watch)
 from .models import NY
 from .publisher import Publisher
+from .resume import config_report, control_report, resume_refusal
 from .price_history import PriceHistoryCollector, price_history_summary, sanitize_price_history
 from .crypto_observation import (CryptoQuoteReader, CryptoWatchCollector,
                                  sanitize_crypto_watch)
@@ -233,7 +234,8 @@ class ObservationWorker:
             if self.publisher is not None:
                 try:
                     self.publisher.publish_worker_state(instance_id=self.instance_id,
-                        halted=bool(self.journal.kill_switch().get("enabled")))
+                        halted=bool(self.journal.kill_switch().get("enabled")),
+                        kill_switch=control_report(self.journal), paper_config=config_report(self.config))
                 except Exception:
                     # No stale evidence is refreshed; the last cloud heartbeat expires.
                     pass
@@ -314,6 +316,21 @@ class ObservationWorker:
         if self.publisher is None:
             return []
         return self.publisher.acknowledge_halts(self.journal)
+
+    def _resumes(self, *, broker_verified, halt_seen):
+        """Authenticated paper resume requests; absent channel means no change."""
+        process = getattr(self.publisher, "process_resumes", None)
+        if process is None:
+            return []
+        now = self.clock()
+
+        def precheck(created_at):
+            return resume_refusal(self.config, self.journal, broker_verified=broker_verified,
+                                  halt_seen=halt_seen, created_at=created_at, now=now)
+        try:
+            return [{"id": ident, "outcome": outcome} for ident, outcome in process(self.journal, precheck)]
+        except Exception:
+            return [{"id": None, "outcome": "resume_channel_unavailable"}]
 
     def _history_state(self, history, *, now, watch=None):
         if history is None:
@@ -433,7 +450,11 @@ class ObservationWorker:
                 elif session.get("broker_account_verified") is False:
                     result["broker"] = {"verified": False, "checked_at": None}
                 stage = "command_dispatch"
+                halts_before = len(result["acknowledged_commands"])
                 result["acknowledged_commands"].extend(self._commands())
+                result["resume_requests"] = self._resumes(
+                    broker_verified=result["broker"]["verified"] is True,
+                    halt_seen=len(result["acknowledged_commands"]) > 0 or halts_before > 0)
             except (RuntimeError, ValueError, TypeError, KeyError, OSError, ArithmeticError):
                 result["error_code"] = stage + "_failed"
                 result["blockers"].append(result["error_code"])
@@ -442,6 +463,8 @@ class ObservationWorker:
                 if stage == "command_dispatch":
                     self.journal.set_kill_switch(True, "cloud_command_dispatch_failed", request_id="dispatcher:" + cycle_id)
             result["halted"] = bool(self.journal.kill_switch().get("enabled"))
+            result["kill_switch"] = control_report(self.journal)
+            result["paper_config"] = config_report(self.config)
             result["completed_at"] = self.clock().isoformat()
             if result["market_watch"] is not None:
                 # Account/session reads may take time after quote receipt. Keep
@@ -476,6 +499,8 @@ class ObservationWorker:
                         publish_args["crypto_watch"] = result["crypto_watch"]
                     if "forex_watch" in result:
                         publish_args["forex_watch"] = result["forex_watch"]
+                    publish_args["kill_switch"] = result["kill_switch"]
+                    publish_args["paper_config"] = result["paper_config"]
                     self.publisher.publish_worker_state(**publish_args)
                     result["cloud_state_published"] = True
                 except Exception:

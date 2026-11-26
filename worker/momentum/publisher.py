@@ -20,6 +20,7 @@ from .strategy_review import build_strategy_review
 from .price_history import sanitize_price_history
 from .crypto_observation import sanitize_crypto_watch
 from .forex_observation import sanitize_forex_watch
+from .resume import RESUME_KIND, REFUSALS, control_report, config_report, safe_reason
 
 
 UTC = timezone.utc
@@ -142,7 +143,8 @@ def build_worker_state(owner_id, instance_id, *, now, broker_verified=False,
                        error_code=None, max_data_age_seconds=2, market_watch=None,
                        allowed_symbols=(), strategy_config=None, price_history=None,
                        crypto_watch=None, allowed_crypto_pairs=(),
-                       forex_watch=None, allowed_forex_pairs=()):
+                       forex_watch=None, allowed_forex_pairs=(),
+                       kill_switch=None, paper_config=None):
     """Build the existing dashboard contract from validated provider evidence.
 
     The caller attests actual account/position/order reads, not a saved account
@@ -221,6 +223,20 @@ def build_worker_state(owner_id, instance_id, *, now, broker_verified=False,
             except (ValueError, TypeError, KeyError, ArithmeticError, UnicodeError, RecursionError):
                 # Optional history never suppresses valid quote/account state.
                 pass
+    if kill_switch is not None:
+        # Latch state only: enabled flags and a bounded worker reason code.
+        row["payload"]["kill_switch"] = {
+            "enabled": kill_switch.get("enabled") is not False,
+            "flatten_requested": kill_switch.get("flatten_requested") is True,
+            "reason": safe_reason(kill_switch.get("reason"))}
+    if paper_config is not None:
+        status = paper_config.get("hash_status")
+        computed = paper_config.get("computed_hash")
+        row["payload"]["paper_config"] = {
+            "hash_status": status if status in {"match", "mismatch", "unset"} else "unavailable",
+            # Digest of non-secret settings, so the owner can approve the exact value.
+            "computed_hash": computed if isinstance(computed, str) and re.fullmatch(r"[0-9a-f]{64}", computed) else None,
+            "blockers": sorted({safe_reason(code) for code in paper_config.get("blockers") or ()})[:20]}
     if crypto_watch is not None and allowed_crypto_pairs:
         try:
             # Strictly optional: bad crypto data cannot hide functioning equity data.
@@ -302,7 +318,8 @@ class Publisher:
                 or not isinstance(prefer, str) or len(prefer) > 128 or "\r" in prefer or "\n" in prefer):
             raise PublisherError("request_invalid")
         if table == "paper_commands":
-            if params.get("owner_id") != "eq." + self.owner or params.get("kind") != "eq.halt_new_entries":
+            if params.get("owner_id") != "eq." + self.owner or params.get("kind") not in {
+                    "eq.halt_new_entries", "eq." + RESUME_KIND}:
                 raise PublisherError("request_invalid")
         elif not isinstance(payload, dict) or payload.get("owner_id") != self.owner:
             raise PublisherError("request_invalid")
@@ -342,7 +359,8 @@ class Publisher:
     def publish_worker_state(self, *, instance_id, broker_verified=False, broker_checked_at=None,
                              data_verified=False, data_feed=None, data_as_of=None, data_received_at=None,
                              halted=False, error_code=None, max_data_age_seconds=None,
-                             market_watch=None, price_history=None, crypto_watch=None, forex_watch=None):
+                             market_watch=None, price_history=None, crypto_watch=None, forex_watch=None,
+                             kill_switch=None, paper_config=None):
         if market_watch is not None:
             if data_feed is not None and data_feed != self.data_feed:
                 raise ValueError("Market Watch feed must match the worker configuration")
@@ -355,7 +373,8 @@ class Publisher:
                                  else max_data_age_seconds, market_watch=market_watch, allowed_symbols=self.watchlist,
                                  strategy_config=self.strategy_config, price_history=price_history,
                                  crypto_watch=crypto_watch, allowed_crypto_pairs=self.crypto_watchlist,
-                                 forex_watch=forex_watch, allowed_forex_pairs=self.forex_watchlist)
+                                 forex_watch=forex_watch, allowed_forex_pairs=self.forex_watchlist,
+                                 kill_switch=kill_switch, paper_config=paper_config)
         # Preserve the expected row even if an injected transport mutates input.
         expected = json.loads(canonical_json(row))
         result = self.request("POST", "worker_state", {"on_conflict": "owner_id", "select": WORKER_COLUMNS}, row,
@@ -460,3 +479,82 @@ class Publisher:
             acknowledged.append(command["id"])
         return acknowledged
 
+    def _resume_row(self, value, now, *, status, error=None):
+        if not isinstance(value, dict) or set(value) != set(COMMAND_COLUMNS.split(",")):
+            raise ValueError("Invalid resume command")
+        command = {**value, "id": _uuid(value["id"]), "owner_id": _uuid(value["owner_id"]),
+                   "nonce": _uuid(value["nonce"])}
+        created = _time(value["created_at"])
+        if (command["owner_id"] != self.owner or command["kind"] != RESUME_KIND
+                or command["status"] != status or command["error"] != error):
+            raise ValueError("Invalid resume command")
+        if status == "queued":
+            if command["acknowledged_at"] is not None:
+                raise ValueError("Invalid queued resume command")
+        else:
+            ack = _time(command["acknowledged_at"])
+            if ack < created or (ack - now).total_seconds() > 5:
+                raise ValueError("Invalid resume acknowledgment")
+        command["_created"] = created
+        return command
+
+    def process_resumes(self, journal, precheck):
+        """Apply queued paper resume requests after a verified paper cycle.
+
+        ``precheck(created_at)`` returns None to allow, else a refusal code.
+        Only a service-role writer can queue ``resume_entries``; the browser
+        insert policy is limited to halts. Any channel or validation problem
+        leaves the latch exactly as it is (never re-opens entries).
+        Returns a list of (command_id, outcome) where outcome is "resumed" or a
+        refusal code. Caller holds the journal's single-worker lease.
+        """
+        try:
+            raw = self.request("GET", "paper_commands", {
+                "owner_id": "eq." + self.owner, "kind": "eq." + RESUME_KIND, "status": "eq.queued",
+                "order": "created_at.asc", "limit": "5", "select": COMMAND_COLUMNS})
+            if not isinstance(raw, list) or len(raw) > 5:
+                raise ValueError
+            now = _time(self.clock())
+            commands = [self._resume_row(value, now, status="queued") for value in raw]
+        except (PublisherError, ValueError, TypeError, KeyError):
+            return [(None, "resume_channel_unavailable")]
+        outcomes = []
+        for command in commands:
+            before = control_report(journal)
+            key = "resume:" + command["id"]
+            try:
+                applied = journal.event_by_key("kill:" + key) is not None
+            except Exception:
+                applied = False
+            # A resume already committed locally only needs its acknowledgment retried.
+            refusal = None if applied else precheck(command["_created"])
+            if refusal is not None and refusal not in REFUSALS:
+                refusal = "resume_check_failed"
+            if refusal is None:
+                try:
+                    if not applied:
+                        journal.set_kill_switch(False, "operator_resume_entries:" + command["id"], request_id=key)
+                    if journal.kill_switch().get("enabled") is not False:
+                        raise ValueError
+                except Exception:
+                    refusal = "resume_check_failed"
+            ack_at = _stamp(_time(self.clock()))
+            status, error = ("acknowledged", None) if refusal is None else ("failed", refusal)
+            try:
+                result = self.request("PATCH", "paper_commands", {
+                    "owner_id": "eq." + self.owner, "id": "eq." + command["id"],
+                    "nonce": "eq." + command["nonce"], "kind": "eq." + RESUME_KIND,
+                    "status": "eq.queued", "select": COMMAND_COLUMNS},
+                    {"status": status, "acknowledged_at": ack_at, "error": error},
+                    prefer="return=representation")
+                if not isinstance(result, list) or len(result) != 1:
+                    raise ValueError
+                self._resume_row(result[0], _time(self.clock()), status=status, error=error)
+            except (PublisherError, ValueError, TypeError, KeyError):
+                # The local journal stays authoritative; the row is retried later.
+                pass
+            outcome = "resumed" if refusal is None else refusal
+            print("Paper resume request " + command["id"] + ": " + outcome
+                  + "; latch reason=" + str(before.get("reason")), flush=True)
+            outcomes.append((command["id"], outcome))
+        return outcomes
