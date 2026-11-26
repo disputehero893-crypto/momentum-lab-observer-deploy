@@ -13,12 +13,13 @@ from .resume import config_report, control_report
 
 
 class Application:
-    def __init__(self, config, *, observation_worker=None, autopilot=None, customer_gateway=None,
-                 defer_journal=False):
+    def __init__(self, config, *, observation_worker=None, autopilot=None, paper_worker=None,
+                 customer_gateway=None, defer_journal=False):
         self.config = config
         self.mutation_lock = threading.Lock()
         self.observation_worker = observation_worker
         self.autopilot = autopilot
+        self.paper_worker = paper_worker
         self.startup_error = None
         self.journal_status = "unopened"
         self.journal = None
@@ -70,6 +71,13 @@ class Application:
                 execution_running = bool(self.autopilot.state().get("execution_enabled"))
             except Exception:
                 execution_running = False
+        paper_status = None
+        if self.paper_worker is not None and self.autopilot is None:
+            try:
+                paper_status = self.paper_worker.execution_status()
+            except Exception:
+                paper_status = {"paper_execution_active": False, "execution_reason": "paper_status_unavailable",
+                                "orders_submitted": 0}
         disk = self.journal.disk_report() if self.journal is not None else {
             "free_bytes": None, "free_mb": None, "min_free_bytes": None, "min_free_mb": None,
             "below_floor": None, "last_write_error": None}
@@ -77,16 +85,42 @@ class Application:
         if journal_status == "writable" and (disk.get("below_floor") or disk.get("last_write_error")):
             journal_status = "degraded"
         degraded = self.startup_error is not None or journal_status != "writable"
+        if self.autopilot is not None:
+            # Existing autopilot gate. Live trading is still unsupported.
+            execution_disabled = not execution_running
+            execution_locked = False
+            paper_running = execution_running
+            orders_submitted = 0
+            paper_execution_active = False
+            execution_reason = "autopilot_service"
+        elif paper_status is not None:
+            paper_execution_active = bool(paper_status.get("paper_execution_active"))
+            execution_disabled = not paper_execution_active
+            # Live stays locked even while paper orders are allowed.
+            execution_locked = True
+            paper_running = paper_execution_active
+            orders_submitted = int(paper_status.get("orders_submitted") or 0)
+            execution_reason = paper_status.get("execution_reason") or "paper_status_unavailable"
+        else:
+            execution_disabled = True
+            execution_locked = True
+            paper_running = False
+            orders_submitted = 0
+            paper_execution_active = False
+            execution_reason = self.startup_error or "observation_runtime_cannot_execute_orders"
         return {
             "status": "degraded" if degraded else "ok",
             "service": "momentum-lab",
-            # serve-observe cannot submit orders. Autopilot reports its own gate.
-            "execution_disabled": True if self.autopilot is None else not execution_running,
-            "execution_locked": self.autopilot is None,
+            # serve-observe cannot submit orders. serve-paper reports its own gate.
+            "execution_disabled": execution_disabled,
+            "execution_locked": execution_locked,
             "paper_trading_enabled": bool(self.config.paper_enabled),
-            "paper_execution_running": False if self.autopilot is None else execution_running,
+            "paper_execution_running": paper_running,
+            "paper_execution_active": paper_execution_active,
+            "execution_reason": execution_reason,
             "live_execution_supported": False,
-            "orders_submitted": 0,
+            "live_execution_locked": True,
+            "orders_submitted": orders_submitted,
             "journal_status": journal_status,
             "disk": disk,
             "startup_error": self.startup_error or disk.get("last_write_error"),
@@ -97,6 +131,18 @@ class Application:
         }
 
     def readiness(self):
+        if self.paper_worker is not None and self.autopilot is None:
+            status = self.paper_worker.execution_status()
+            reason = status.get("execution_reason") or "paper_status_unavailable"
+            return {"mode": "paper", "runtime": "serve_paper",
+                    "paper_trading_enabled": bool(self.config.paper_enabled),
+                    "paper_execution_active": bool(status.get("paper_execution_active")),
+                    "paper_execution_running": bool(status.get("paper_execution_active")),
+                    "execution_reason": reason,
+                    "orders_submitted": int(status.get("orders_submitted") or 0),
+                    "live_execution_supported": False, "live_execution_locked": True,
+                    "configuration": self.config.public(),
+                    "launch_blockers": [] if status.get("paper_execution_active") else [reason]}
         if self.autopilot is not None:
             state = self.autopilot.state()
             return {"mode": "paper", "runtime": "autopilot", "state": state["state"],
@@ -138,9 +184,14 @@ class Application:
         if self.autopilot is not None:
             return {"readiness": self.readiness(), "autopilot": self.autopilot.state()}
         completed = self.journal.latest("demo_run_completed") if self.journal is not None else None
-        return {"readiness": self.readiness(), "latest_demo": completed["payload"] if completed else None,
+        body = {"readiness": self.readiness(), "latest_demo": completed["payload"] if completed else None,
                 "paper_state": self.observation_worker.state() if self.observation_worker else None,
                 "paper_state_explanation": "Observation is read-only; no HTTP route starts broker order execution."}
+        if self.paper_worker is not None and self.autopilot is None:
+            body["paper_execution"] = self.paper_worker.execution_status()
+            body["paper_state_explanation"] = (
+                "serve-paper submits only while every paper gate is open. Live execution is locked.")
+        return body
 
 
 def make_server(config, app=None, *, address=None, server_class=ThreadingHTTPServer):

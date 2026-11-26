@@ -15,6 +15,18 @@ history and reconcile independently before accepting financial completeness.
 
 Paper trading omits regulatory fees. This module therefore never certifies
 actual fee completeness or turns an empty fee stream into a zero-cost claim.
+Completeness is certified separately, fail-closed, by
+``momentum.activity_completeness`` (exhaustive scan + identical re-scan +
+broker position reconciliation), never by this importer alone.
+
+Non-equity segregation (rule ``NON_EQUITY_SEGREGATION_RULE``): the same paper
+account may also hold the crypto loop's spot pairs. A FILL whose
+``asset_class`` is ``crypto`` or whose symbol is a reviewed crypto paper pair
+(``BTC/USD`` or the slashless ``BTCUSD`` form), and a CFEE attributed to such
+a pair, is kept as a visible ``segregated_non_equity`` observation, counted in
+coverage and logged, and excluded from the equity ledger. Those rows are owned
+by the crypto loop's own accounting. Any other non-equity row (unreviewed
+pair, unattributed crypto fee, unknown type) stays a hard blocker.
 Broker Activity SSE correction/bust semantics are deliberately not projected
 onto Trading REST: correction markers and unknown events remain blockers.
 
@@ -26,17 +38,21 @@ description or raw provider payload is included in normalized observations.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 import json
+import logging
 import re
 import time
 from typing import Any
 
 from .alpaca import BrokerError
 from .config import SYMBOL
+from .paper_risk import CRYPTO_PAPER_PAIRS
+
+LOG = logging.getLogger("momentum.accounting")
 
 SOURCE = "alpaca_account_activities"
 MAX_PAGE_BYTES = 1_000_000
@@ -49,6 +65,16 @@ _RFC3339 = re.compile(
 _DECIMAL = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)\Z")
 _CORRECTION_FIELDS = ("previous_id", "previous_execution_id", "correction_id", "replaces_id")
 _CORRECTION_TYPES = {"trade_correct", "trade_bust", "correction", "correct", "bust", "reversal"}
+NON_EQUITY_SEGREGATION_RULE = "crypto_paper_pair_segregated_v1"
+SEGREGATED_KIND = "segregated_non_equity"
+# Alpaca reports crypto activity symbols as either "BTC/USD" or "BTCUSD".
+_CRYPTO_SYMBOLS = {**{pair: pair for pair in CRYPTO_PAPER_PAIRS},
+                   **{pair.replace("/", ""): pair for pair in CRYPTO_PAPER_PAIRS}}
+
+
+def crypto_paper_pair(symbol):
+    """Return the reviewed crypto pair for an activity/position symbol, else None."""
+    return _CRYPTO_SYMBOLS.get(symbol) if isinstance(symbol, str) else None
 
 
 class ActivityImportError(BrokerError):
@@ -178,6 +204,7 @@ class ActivityObservation:
     blockers: tuple[str, ...] = ()
     reported_date: str | None = None
     cash_change: str | None = None
+    segregation: dict[str, str] | None = field(default=None)
 
     def to_dict(self):
         result = {"source_id": self.source_id, "activity_type": self.activity_type,
@@ -187,6 +214,8 @@ class ActivityObservation:
             result["reported_date"] = self.reported_date
         if self.cash_change is not None:
             result["cash_change"] = self.cash_change
+        if self.segregation is not None:
+            result["segregation"] = dict(self.segregation)
         return result
 
 
@@ -221,6 +250,9 @@ def normalize_activity(row):
         if not isinstance(row.get("type"), str) or row["type"] not in {"fill", "partial_fill"}:
             return ActivityObservation(source_id, activity_type, "unsupported", digest, None,
                                        ("unsupported_fill_execution_type",))
+        pair = crypto_paper_pair(row.get("symbol"))
+        if row.get("asset_class") == "crypto" or pair is not None:
+            return _segregate_crypto(row, source_id, activity_type, digest, pair)
         if (not isinstance(row.get("symbol"), str) or not SYMBOL.fullmatch(row["symbol"])
                 or row.get("asset_class", "us_equity") != "us_equity"
                 or not isinstance(row.get("side"), str) or row["side"] not in {"buy", "sell"}):
@@ -248,6 +280,12 @@ def normalize_activity(row):
                   "date_basis": "provider_activity_or_settlement_date"}
         return ActivityObservation(source_id, activity_type, "fee", digest, record,
                                    (), day, cash_change)
+    if activity_type == "CFEE":
+        pair = crypto_paper_pair(row.get("symbol"))
+        if pair is None:
+            return ActivityObservation(source_id, activity_type, "unsupported", digest, None,
+                                       ("unattributed_non_equity_fee",))
+        return _segregate_crypto(row, source_id, activity_type, digest, pair)
     if activity_type in {"CSD", "CSW"}:
         day = _reported_date(row.get("date"))
         cash_change = _number(row.get("net_amount"))
@@ -257,6 +295,26 @@ def normalize_activity(row):
         return ActivityObservation(source_id, activity_type, "cash", digest, None, (), day, cash_change)
     return ActivityObservation(source_id, activity_type, "unsupported", digest, None,
                                ("unsupported_account_activity",))
+
+
+def _segregate_crypto(row, source_id, activity_type, digest, pair):
+    """Explicit exclusion rule; anything not provably a reviewed pair blocks."""
+    if pair is None:
+        return ActivityObservation(source_id, activity_type, "unsupported", digest, None,
+                                   ("unreviewed_non_equity_asset",))
+    if row.get("asset_class", "crypto") != "crypto":
+        # A reviewed crypto symbol tagged as another asset class is ambiguous.
+        return ActivityObservation(source_id, activity_type, "unsupported", digest, None,
+                                   ("non_equity_asset_class_conflict",))
+    detail = {"rule": NON_EQUITY_SEGREGATION_RULE, "asset_class": "crypto", "pair": pair,
+              "activity_type": activity_type}
+    if activity_type == "FILL":
+        if not isinstance(row.get("side"), str) or row["side"] not in {"buy", "sell"}:
+            return ActivityObservation(source_id, activity_type, "unsupported", digest, None,
+                                       ("unsupported_fill_asset_or_side",))
+        detail["side"] = row["side"]
+    return ActivityObservation(source_id, activity_type, SEGREGATED_KIND, digest, None,
+                               (), None, None, detail)
 
 
 @dataclass(frozen=True)
@@ -316,6 +374,14 @@ def fetch_activities(client, *, account_id, after, until, max_pages=100,
             if completion_ns < request_ns:
                 raise ActivityImportError("activities_observation_clock_regressed")
             rows = tuple(row.record for row in observations if row.record is not None)
+            segregated = [row for row in observations if row.kind == SEGREGATED_KIND]
+            by_pair = {}
+            for row in segregated:
+                by_pair[row.segregation["pair"]] = by_pair.get(row.segregation["pair"], 0) + 1
+            if segregated:
+                LOG.info("accounting: segregated %d non-equity activities from the equity ledger "
+                         "(rule=%s, by_pair=%s)", len(segregated), NON_EQUITY_SEGREGATION_RULE,
+                         dict(sorted(by_pair.items())))
             coverage = {
                 "account_id": account_id, "environment": "paper", "source": SOURCE,
                 "window_start": params["after"], "window_end": params["until"],
@@ -326,13 +392,20 @@ def fetch_activities(client, *, account_id, after, until, max_pages=100,
                 "activity_pages_exhausted": True, "page_count": pages,
                 "activity_count": len(observations), "ledger_record_count": len(rows),
                 "last_activity_id": cursor, "query_time_basis": "activity_creation_time",
+                "segregation_rule": NON_EQUITY_SEGREGATION_RULE,
+                "segregated_non_equity_count": len(segregated),
+                "segregated_non_equity_by_pair": dict(sorted(by_pair.items())),
+                "segregated_non_equity_ids": [row.source_id for row in segregated],
                 "terminal_observation": "empty_page_after_exclusive_id_cursor" if cursor else "empty_first_page",
                 "evidence": [
                     "All-types Trading API REST scan used fixed creation-time bounds, asc and exclusive activity-ID cursors.",
                     "An empty page was observed; this is not a transactionally consistent or financially final snapshot.",
                     "https://docs.alpaca.markets/us/reference/getaccountactivities-2",
                     "Paper trading omits regulatory fees: https://docs.alpaca.markets/us/docs/paper-trading",
-                ],
+                ] + ([f"Segregated {len(segregated)} non-equity crypto activities on reviewed pairs "
+                      f"{','.join(sorted(by_pair))} by rule {NON_EQUITY_SEGREGATION_RULE}; excluded from "
+                      "the equity ledger and owned by the crypto paper loop's accounting."]
+                     if segregated else []),
                 # Missing baseline/execution/cost completeness is represented by
                 # the flags above. A caller may establish those independently;
                 # explicit normalization anomalies must remain hard blockers.

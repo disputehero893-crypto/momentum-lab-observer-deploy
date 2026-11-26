@@ -1,7 +1,9 @@
 """Optional Gemini chart reader that trades alongside the rule strategy (paper only).
 
 Safety contract (see AI_ADVISOR.md):
-* Inactive unless AI_ADVISOR_ENABLED=true and AI_ADVISOR_MODE is advise or cotrade.
+* Inactive unless AI_ADVISOR_ENABLED=true and AI_ADVISOR_MODE is advise, cotrade or
+  paper_execute. For stock chart reads, paper_execute behaves like advise; its
+  crypto decisions live in momentum.ai_paper_trader (AI_PAPER_TRADING.md).
 * Chart reads run on a small background thread pool, so the rule path never
   waits on the network. Results are cached per symbol and used while fresh.
 * advise: AI calls are logged and tagged against rule candidates, nothing else.
@@ -45,7 +47,7 @@ PATTERNS = ("pullback", "breakout", "bull_flag", "bear_flag", "pennant", "double
 CALLS = ("buy", "sell", "wait")
 SIGNAL_KEYS = frozenset({"symbol", "call", "pattern", "confidence", "reason"})
 REASON_MAX = 240
-MODES = ("off", "advise", "cotrade")
+MODES = ("off", "advise", "cotrade", "paper_execute")
 SOURCES = ("confluence", "rules", "ai")
 PRIORITY = {"confluence": 0, "rules": 1, "ai": 2}
 
@@ -109,7 +111,7 @@ class AdvisorConfig:
     enabled: bool = False
     api_key: str = field(default="", repr=False)
     model: str = DEFAULT_MODEL
-    mode: str = "off"                         # off | advise | cotrade
+    mode: str = "off"                         # off | advise | cotrade | paper_execute
     timeout_seconds: float = 6.0
     min_interval_seconds: float = 4.0         # spacing between any two Gemini calls
     max_calls_per_day: int = 200              # per New York day, all symbols
@@ -125,7 +127,7 @@ class AdvisorConfig:
 
     def __post_init__(self):
         if self.mode not in MODES:
-            raise AdvisorConfigError("AI_ADVISOR_MODE must be off, advise or cotrade")
+            raise AdvisorConfigError("AI_ADVISOR_MODE must be off, advise, cotrade or paper_execute")
         if not MODEL_NAME.fullmatch(self.model):
             raise AdvisorConfigError("GEMINI_MODEL must be a plain model id such as " + DEFAULT_MODEL)
 

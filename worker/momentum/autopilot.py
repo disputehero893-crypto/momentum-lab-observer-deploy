@@ -13,6 +13,7 @@ import time
 import uuid
 
 from .activities import fetch_activities
+from .activity_completeness import apply_certification, certify_import
 from .alpaca import PaperClient, parse_time
 from .data import SnapshotBuilder
 from .customer_settings import PaperSettingsBinding, SettingsBindingError
@@ -39,11 +40,18 @@ class ExecutionAccounting:
         self.config, self.provider, self.clock = config, provider, clock
 
     def collect(self, account_id):
+        """Exhaustive import, fail-closed certification, then ledger snapshot.
+
+        Completeness flags come only from ``certify_import`` (identical re-scan
+        plus broker equity position reconciliation); on any doubt they stay
+        False and the ledger keeps its execution/fee coverage blockers.
+        """
         cfg = self.config
         if not cfg.accounting_history_start:
             return {"complete": False, "blockers": ["accounting_history_start_missing"]}
+        until = self.clock().isoformat()
         batch = fetch_activities(self.provider, account_id=account_id,
-            after=cfg.accounting_history_start, until=self.clock().isoformat())
+            after=cfg.accounting_history_start, until=until)
         keys = ("account_id", "environment", "source", "window_start", "window_end", "as_of",
                 "executions_complete", "fees_complete", "opening_lots_complete", "opening_lots", "evidence", "blockers")
         coverage = {k: deepcopy(batch.coverage[k]) for k in keys}
@@ -52,10 +60,16 @@ class ExecutionAccounting:
                                  window_start=coverage["window_start"])
             coverage.update(opening_lots_complete=True, opening_lots=baseline["opening_lots"],
                             opening_evidence=baseline["evidence"])
+        certification = certify_import(self.provider, batch, account_id=account_id,
+            after=cfg.accounting_history_start, until=until,
+            opening_lots=coverage["opening_lots"] if coverage["opening_lots_complete"] else None)
+        coverage = apply_certification(coverage, certification)
         ledger = AccountingLedger(cfg.db_path, account_id=account_id)
         ledger.ingest_batch(batch.records, batch_id="autopilot-"+uuid.uuid4().hex, coverage=coverage)
-        return ledger.snapshot(session_date=self.clock().astimezone(NY).date().isoformat(),
+        result = ledger.snapshot(session_date=self.clock().astimezone(NY).date().isoformat(),
             now=self.clock(), cost_policy=cfg.accounting_cost_policy).to_dict()
+        result["completeness_certification"] = certification.to_dict()
+        return result
 
 
 class PaperAutopilot:

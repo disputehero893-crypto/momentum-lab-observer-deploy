@@ -56,6 +56,23 @@ def _finite(value: object) -> bool:
     return isinstance(value, Decimal) and value.is_finite()
 
 
+def limits_for_risk(risk_cfg, *, feed: str) -> RiskLimits:
+    """Shared paper caps for equity (IEX) and crypto.
+
+    Notional, daily loss, and quote age come from the worker RiskConfig.
+    The feed selects which venue the screen will allow. Equity uses ``iex``.
+    """
+    notional = Decimal(risk_cfg.max_notional)
+    return RiskLimits(
+        max_order_notional=notional,
+        max_total_exposure=min(Decimal("1000"), notional),
+        max_daily_loss=Decimal(risk_cfg.max_daily_loss),
+        max_open_positions=3,
+        max_feed_age_ms=int(Decimal(risk_cfg.max_quote_age_seconds) * 1000),
+        feed=feed,
+    )
+
+
 def check_paper_intent(
     intent: PaperIntent,
     state: RiskState,

@@ -175,13 +175,23 @@ class PaperSession:
                 continue
             if order.get("status") not in TERMINAL | ACTIVE:
                 errors.append("unrecognized_order_status")
-            filled = whole(order.get("filled_qty"))
+            raw_filled = order.get("filled_qty") if "filled_qty" in order else None
+            if raw_filled is None or raw_filled == "":
+                # A missing fill is unknown. It is not a flat zero that can close exposure.
+                errors.append("filled_quantity_unknown")
+                continue
+            filled = whole(raw_filled)
             if filled > whole(order["qty"]):
                 errors.append("invalid_cumulative_fill_quantity")
                 continue
-            if filled and Decimal(str(order.get("filled_avg_price", "0"))) <= 0:
-                errors.append("filled_price_unknown")
-                continue
+            if filled:
+                price = order.get("filled_avg_price") if "filled_avg_price" in order else None
+                try:
+                    if price is None or price == "" or Decimal(str(price)) <= 0:
+                        raise ValueError
+                except (ValueError, TypeError, ArithmeticError):
+                    errors.append("filled_price_unknown")
+                    continue
             old = [e for e in self.journal.events(event_type="paper_order_observed")
                    if e["payload"]["order"].get("client_order_id") == client_id]
             if old and filled < whole(old[-1]["payload"]["order"].get("filled_qty")):
@@ -259,6 +269,50 @@ class PaperSession:
                 "orders": observations, "known": known, "as_of": account_requested_at.isoformat(),
                 "account_received_at": account_received_at.isoformat(), "evidence_collected_at": self.clock().isoformat(),
                 "errors": sorted(set(errors)), "reconciled": not errors}
+
+    def _screen_equity_entry(self, intent, snapshot, evidence, account):
+        """Run PR #8's check_paper_intent on one stock entry before submit.
+
+        Fail closed. This is not used for protective exits.
+        """
+        from .alpaca import PaperClient
+        from .paper_risk import PaperIntent, RiskState, check_paper_intent, limits_for_risk
+        try:
+            qty = Decimal(str(intent.get("qty")))
+            price = Decimal(str(intent.get("entry_limit", intent.get("limit_price"))))
+            client_id = PaperClient.client_order_id(intent)
+            exposure = Decimal("0")
+            open_positions = 0
+            for position in evidence.get("positions") or []:
+                held = Decimal(str(position.get("qty") or "0"))
+                if held > 0:
+                    open_positions += 1
+                    exposure += held * Decimal(str(position.get("entry_price") or "0"))
+            for order in evidence.get("opening") or []:
+                remaining = Decimal(str(order.get("qty") or "0")) - Decimal(str(order.get("filled_qty") or "0"))
+                limit = Decimal(str(order.get("limit_price") or "0"))
+                if remaining > 0 and limit > 0:
+                    exposure += remaining * limit
+            realized = Decimal(str(account.get("realized_pnl")))
+            quote = snapshot.get("quote") or {}
+            now = self.clock()
+            ages = [(now - parse_time(quote[key])).total_seconds() for key in ("timestamp", "received_at")]
+            age = max(ages)
+            feed_age_ms = int(age * 1000) if age >= 0 else -1
+            seen = set()
+            for event in self.journal.events(event_type="paper_order_requested"):
+                cid = (event.get("payload") or {}).get("client_order_id")
+                if cid:
+                    seen.add(str(cid))
+            halted = self.journal.kill_switch().get("enabled") is not False
+            state = RiskState(
+                exposure=exposure, realized_daily_pnl=realized, open_positions=open_positions,
+                feed_age_ms=feed_age_ms, kill_switch=halted, seen_order_ids=frozenset(seen))
+            limits = limits_for_risk(self.risk.config, feed=self.config.data_feed)
+            return check_paper_intent(
+                PaperIntent(intent.get("symbol"), qty, price, client_id), state, limits)
+        except Exception:
+            return False, "paper_intent_screen_failed"
 
     def cycle(self, *, snapshots=None, session_ledger=None, execute=False, allow_entries=True):
         """Run once with fresh provider evidence. `execute` defaults False.
@@ -394,6 +448,13 @@ class PaperSession:
                     action.update(extra)
                 if execute:
                     guard("buy")
+                    # Entry screen only. Protective exits use the sell path and
+                    # must not be blocked by this notional/position check.
+                    approved, reason = self._screen_equity_entry(checked.intent, snapshot, evidence, account)
+                    action["paper_intent_reason"] = reason
+                    if not approved:
+                        actions.append(action)
+                        return action
                     self.provider.submit(checked.intent, self.journal, run_id, quote=snapshot["quote"], guard=lambda: guard("buy"))
                     # Reserve acknowledged/uncertain opening quantity before considering another symbol.
                     account["open_order_qty"] += checked.intent["qty"]

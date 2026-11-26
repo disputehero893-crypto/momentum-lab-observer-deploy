@@ -1,0 +1,9 @@
+#!/bin/sh
+# The image ENTRYPOINT is `python -m momentum.container_entrypoint` and is
+# unchanged. This launcher is the one worker command: observation plus paper
+# stock orders when every gate is open. It does not start a second process
+# or the standalone crypto timer. Live execution stays locked.
+if command -v python >/dev/null 2>&1; then
+  exec python -m momentum.container_entrypoint serve-paper "$@"
+fi
+exec python3 -m momentum.container_entrypoint serve-paper "$@"

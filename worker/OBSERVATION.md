@@ -43,7 +43,7 @@ python -m momentum serve-observe
 
 The first command performs one cycle and exits. A cycle error produces exit code 2 and a fixed diagnostic code. The second runs the observer and authenticated HTTP API together. Public `/health` reports process liveness; private `/api/readiness` and `/api/state` report the actual in-process worker and latest local cycle. An old journal record cannot make a restarted service appear connected.
 
-`python -m momentum serve` remains the demo/journal API, without observation. `paper-preflight` now uses the GET-only adapter and does not need `PAPER_TRADING_ENABLED=true`. The worker has no shipped order-execution command.
+`python -m momentum serve` remains the demo/journal API, without observation. `paper-preflight` now uses the GET-only adapter and does not need `PAPER_TRADING_ENABLED=true`. `serve-observe` has no order-execution command. Paper submit and cancel are the separate `serve-paper` release in [PAPER_RELEASE.md](PAPER_RELEASE.md). `PAPER_TRADING_ENABLED` cannot arm this observation process.
 
 ## Server configuration
 

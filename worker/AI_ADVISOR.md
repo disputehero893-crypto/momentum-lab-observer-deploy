@@ -26,7 +26,7 @@ Gemini client; no network).
    | --- | --- |
    | `GEMINI_API_KEY` | the key from AI Studio |
    | `AI_ADVISOR_ENABLED` | `true` |
-   | `AI_ADVISOR_MODE` | `advise` to start (log only), later `cotrade` |
+   | `AI_ADVISOR_MODE` | `advise` to start (log only), later `cotrade`, or `paper_execute` for Gemini-decided crypto paper trades (see AI_PAPER_TRADING.md) |
 
    Both `AI_ADVISOR_ENABLED=true` and a mode other than `off` are needed. With
    either one missing, the advisor does nothing at all.
