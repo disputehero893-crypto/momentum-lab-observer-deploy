@@ -204,6 +204,12 @@ def main(argv=None):
                                     name="observation-stop", daemon=True)
                                 bridge.start()
                                 print("Paper observation started; broker transport is GET-only; execution disabled", flush=True)
+                                from .resume import config_report, control_report
+                                latch = control_report(app.journal)
+                                print("Kill switch " + ("latched" if latch["enabled"] else "clear")
+                                      + "; reason=" + str(latch["reason"])
+                                      + "; flatten_requested=" + str(latch["flatten_requested"]).lower()
+                                      + "; paper config hash " + config_report(config)["hash_status"], flush=True)
                                 worker.run()
                         except (ObservationError, sqlite3.Error, OSError, Exception) as exc:
                             text = str(exc)

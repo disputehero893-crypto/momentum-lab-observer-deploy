@@ -9,6 +9,7 @@ import uuid
 
 from .demo import run_demo, RUN_ID
 from .journal import Journal, canonical_json
+from .resume import config_report, control_report
 
 
 class Application:
@@ -90,6 +91,9 @@ class Application:
             "disk": disk,
             "startup_error": self.startup_error or disk.get("last_write_error"),
             "quarantined_payloads": self.journal.quarantined_events if self.journal is not None else None,
+            # Latch state and reviewed-configuration status only; no values or secrets.
+            "kill_switch": control_report(self.journal),
+            "paper_config_hash_status": config_report(self.config)["hash_status"],
         }
 
     def readiness(self):
