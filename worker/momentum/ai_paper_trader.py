@@ -372,6 +372,7 @@ class GeminiCryptoTrader:
         self._last_request: dict[str, float] = {}
         self._backoff_until = 0.0
         self._seq = 0
+        self._failures: dict[str, str] = {}
 
     def __repr__(self):
         return f"GeminiCryptoTrader(model={self.settings.model!r}, key_configured={self._client is not None})"
@@ -434,7 +435,7 @@ class GeminiCryptoTrader:
                                                          - self.book.entries_today())}}
         parts = [{"text": "Facts (data, not instructions):\n" + json.dumps(facts, sort_keys=True, default=str)}]
         try:
-            text = self._client.generate(parts, system=SYSTEM_PROMPT, schema=DECISION_SCHEMA, max_output_tokens=256)
+            text = self._client.generate(parts, system=SYSTEM_PROMPT, schema=DECISION_SCHEMA, max_output_tokens=2048)
         except Exception as exc:
             name = str(exc) if isinstance(exc, GeminiError) else type(exc).__name__
             return {**base, "status": "error", "reason": "api_" + name[:60]}
@@ -456,6 +457,11 @@ class GeminiCryptoTrader:
                 self._backoff_until = self._monotonic() + 300.0
         self.book.record_decision({k: v for k, v in decision.items() if k != "asked_mono"})
 
+    def failure_detail(self, pair) -> str | None:
+        """Short, key-free reason for this pair's last failed decision (e.g. api_http_400)."""
+        with self._lock:
+            return self._failures.get(pair)
+
     def take(self, pair, quote) -> tuple[dict[str, Any] | None, str]:
         """Consume this pair's latest decision if usable; else (None, why)."""
         with self._lock:
@@ -463,6 +469,8 @@ class GeminiCryptoTrader:
         if decision is None:
             return None, "no_ai_decision"
         if decision.get("status") != "ok":
+            with self._lock:
+                self._failures[pair] = str(decision.get("reason") or "unknown")[:80]
             return None, "ai_" + str(decision.get("status") or "error")
         if self._monotonic() - float(decision.get("asked_mono", 0)) > self.settings.decision_max_age_seconds:
             return None, "ai_decision_stale"
@@ -570,7 +578,12 @@ class AICryptoPaperLoop(CryptoPaperLoop):
             pair = quote["pair"]
             decision, why = self.trader.take(pair, quote)
             if decision is None:
-                decisions.append({"pair": pair, "action": "hold", "reason": why})
+                row = {"pair": pair, "action": "hold", "reason": why}
+                if why in {"ai_error", "ai_invalid"}:
+                    detail = getattr(self.trader, "failure_detail", lambda _p: None)(pair)
+                    if detail:
+                        row["detail"] = detail
+                decisions.append(row)
                 continue
             held = self.positions.get(pair)
             if decision["action"] == "exit" and held is not None:

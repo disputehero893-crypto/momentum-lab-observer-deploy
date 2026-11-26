@@ -249,6 +249,16 @@ class ObservationWorker:
         self.session = PaperSession(config, self.provider, journal=self.journal,
                                     snapshot_builder=self.builder, clock=self.clock,
                                     execution_guard=(lambda: not self.stop_event.is_set()) if self.stock_execution else None)
+        # Separate day-trade equity session (candle profile), serve-paper only.
+        # Its own scope, blockers and reconciliation; it never blocks the
+        # large-cap session or the crypto loop.
+        self.day_trade = None
+        if self.stock_execution and getattr(config, "day_trade_profile", "") == "small_cap_candle_patterns_iex_v1":
+            from .day_trade_session import DayTradeEquitySession
+            self.day_trade = DayTradeEquitySession(
+                config, self.provider, self.session.journal, clock=self.clock,
+                execution_guard=lambda: not self.stop_event.is_set())
+            self.session.external_exposure = self.day_trade.exposure
         cloud = (config.supabase_url, config.supabase_service_role_key, config.owner_user_id)
         self.publisher = publisher if publisher is not None else (Publisher(config, clock=self.clock) if all(cloud) else None)
         if any(cloud) and not all(cloud):
@@ -533,6 +543,13 @@ class ObservationWorker:
                     self.paper_execution_active = bool(active and execute)
                 session = self.session.cycle(snapshots=snapshots, session_ledger=session_ledger, execute=execute)
                 result["session"] = session
+                if self.day_trade is not None:
+                    try:
+                        result["day_trade"] = self.day_trade.cycle(
+                            execute=bool(execute), session_ledger=session_ledger if ledger_ready(session_ledger) else None)
+                    except Exception:
+                        result["day_trade"] = {"profile": self.config.day_trade_profile, "active": False,
+                                               "errors": ["day_trade_cycle_failed"]}
                 if self.stock_execution:
                     if execute and session.get("execute_requested") is not True:
                         self.execution_reason = "paper_cycle_failed"
@@ -688,7 +705,7 @@ class ObservationWorker:
             }
         orders = self._acknowledged_stock_orders()
         self.orders_submitted = orders
-        return {
+        status = {
             "paper_trading_enabled": bool(self.config.paper_enabled),
             "paper_execution_active": bool(self._active and self.paper_execution_active and not self.stop_event.is_set()),
             "execution_reason": self.execution_reason,
@@ -696,6 +713,14 @@ class ObservationWorker:
             "live_execution_locked": True,
             "orders_submitted": orders,
         }
+        if self.day_trade is not None:
+            last = self.day_trade.status()
+            status["day_trade_session"] = {
+                "profile": last.get("profile"), "active": bool(last.get("active")),
+                "blockers": list(last.get("blockers") or []), "errors": list(last.get("errors") or [])[:10],
+                "orders_submitted": len(self.day_trade.journal.events(event_type="day_trade_order_acknowledged")),
+            }
+        return status
 
     def run(self, *, max_cycles=None, elapsed_clock=time.monotonic):
         if not self._active:

@@ -284,8 +284,8 @@ class Config:
         if self.crypto_paper_execution_enabled and not self.crypto_watchlist:
             reasons.append("crypto_watchlist_missing")
         if self.day_trade_profile:
-            from .day_trade_profiles import blockers
-            reasons.extend(blockers(self.day_trade_profile, watchlist=self.watchlist, data_feed=self.data_feed))
+            from .day_trade_profiles import global_blockers
+            reasons.extend(global_blockers(self.day_trade_profile, watchlist=self.watchlist, data_feed=self.data_feed))
         if self.paper_reviewed_config_hash != self.review_hash():
             reasons.append("exact_paper_configuration_not_reviewed")
         return reasons

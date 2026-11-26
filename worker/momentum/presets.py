@@ -25,8 +25,12 @@ PROFILE_LIQUID_IEX_V1 = "liquid_large_cap_iex_v1"
 PROFILE_LIQUID_IEX = "liquid_large_cap_iex_v2"
 PROFILE_LIQUID_IEX_V2 = PROFILE_LIQUID_IEX
 PROFILE_SMALL_CAP = "experimental_v1"
+# The day-trade candle profile places paper orders only through its own
+# session (day_trade_session.DayTradeScope); the large-cap path still requires
+# the large-cap strategy config id and watchlist, so it cannot submit these.
+PROFILE_CANDLE_IEX_V1 = "small_cap_candle_patterns_iex_v1"
 APPROVED_PAPER_PROFILES = frozenset({
-    PROFILE_LIQUID_IEX_V1, PROFILE_LIQUID_IEX_V2, PROFILE_SMALL_CAP,
+    PROFILE_LIQUID_IEX_V1, PROFILE_LIQUID_IEX_V2, PROFILE_SMALL_CAP, PROFILE_CANDLE_IEX_V1,
 })
 
 # Fixture feeds used by the synthetic demo and unit tests. They never satisfy

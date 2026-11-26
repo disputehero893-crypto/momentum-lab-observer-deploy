@@ -297,8 +297,16 @@ class PaperClient:
             if not 0 <= risk_age <= 2 or intent.get("paper_only") is not True or intent.get("live_enabled") is not False:
                 raise PaperDisabled("A fresh paper risk approval is required")
 
-    def submit(self, intent, journal, run_id, *, quote, guard):
-        """Persist before POST; recover by ID, never blindly repeat an ambiguous POST."""
+    def submit(self, intent, journal, run_id, *, quote, guard, scope=None):
+        """Persist before POST; recover by ID, never blindly repeat an ambiguous POST.
+
+        ``scope`` (a ``day_trade_session.DayTradeScope``) is the separate
+        day-trade equity session: its own profile and config id, symbols
+        OUTSIDE the large-cap watchlist (never crypto), regular-session limit
+        orders, and its own journal event types so the large-cap session never
+        counts these orders as its own. Same paper host and the same
+        ``paper_blockers()``/risk-config checks either way.
+        """
         self._enabled()
         blockers = self.config.paper_blockers()
         if blockers:
@@ -307,15 +315,21 @@ class PaperClient:
         from .risk import RiskConfig
         if intent.get("mode") != "paper" or intent.get("profile") not in APPROVED_PAPER_PROFILES:
             raise PaperDisabled("Unapproved intention environment or profile")
-        if intent.get("config_id") != load_strategy(self.config.strategy_overrides).config_id:
-            raise PaperDisabled("Strategy configuration changed since the intention")
+        if scope is None:
+            if intent.get("config_id") != load_strategy(self.config.strategy_overrides).config_id:
+                raise PaperDisabled("Strategy configuration changed since the intention")
+        elif intent.get("profile") != scope.profile or intent.get("config_id") != scope.config_id \
+                or self.config.day_trade_profile != scope.profile:
+            raise PaperDisabled("Day-trade profile or configuration changed since the intention")
         if intent.get("side") == "buy" and intent.get("risk_config_id") != RiskConfig(**self.config.risk_overrides).config_id:
             raise PaperDisabled("Entry is missing a current risk approval")
         symbol = intent.get("symbol", "")
         if not SYMBOL.fullmatch(symbol) or intent.get("side") not in {"buy", "sell"}:
             raise ValueError("Only long-equity buy/sell intents are supported")
-        if symbol not in self.config.watchlist:
+        if scope is None and symbol not in self.config.watchlist:
             raise PaperDisabled("Symbol is outside the reviewed watchlist")
+        if scope is not None and not scope.allows(symbol):
+            raise PaperDisabled("Symbol belongs to another paper session")
         if intent.get("feed") != self.config.data_feed or quote.get("feed") != self.config.data_feed:
             raise PaperDisabled("Synthetic or mismatched feeds cannot reach the paper execution adapter")
         if quote.get("symbol", symbol) != symbol:
@@ -332,12 +346,13 @@ class PaperClient:
         client_id = self.client_order_id(intent)
         payload = {"symbol": symbol, "qty": str(int(qty)), "side": intent["side"], "type": "limit",
                    "time_in_force": "day", "limit_price": decimal_string(price),
-                   "extended_hours": True, "client_order_id": client_id}
+                   "extended_hours": True if scope is None else False, "client_order_id": client_id}
+        ev = (scope.event_prefix if scope is not None else "paper") + "_order_"
         key = "paper-request:" + client_id
         prior = journal.event_by_key(key)
         existing = self.order_by_client_id(client_id)
         if existing is not None:
-            journal.append(run_id, "paper_order_recovered", {"client_order_id": client_id, "order": existing},
+            journal.append(run_id, ev + "recovered", {"client_order_id": client_id, "order": existing},
                            key="recovered:" + run_id + ":" + client_id + ":" + sha256(json.dumps(existing, sort_keys=True).encode()).hexdigest()[:16])
             return existing
         if prior:
@@ -345,27 +360,28 @@ class PaperClient:
             raise AmbiguousSubmission("Previously attempted order not found; automatic resubmission blocked")
         guard()
         self._submission_freshness(intent, quote)
-        journal.append(run_id, "paper_order_requested", {"client_order_id": client_id, "intent": intent, "request": payload},
+        journal.append(run_id, ev + "requested", {"client_order_id": client_id, "intent": intent, "request": payload},
                        key=key)
         # Recheck the locally durable kill switch immediately before the external request.
         try:
             guard()
             self._submission_freshness(intent, quote)
         except Exception:
-            journal.append(run_id, "paper_order_not_sent", {"client_order_id": client_id, "reason": "execution_gate_changed"},
+            journal.append(run_id, ev + "not_sent", {"client_order_id": client_id, "reason": "execution_gate_changed"},
                            key="not-sent:" + client_id)
             raise
         try:
             order = self._request("POST", "/v2/orders", payload=payload)
         except BrokerError as exc:
             definite = exc.status is not None and 400 <= exc.status < 500 and exc.status not in {408, 409, 429}
-            event = "paper_order_rejected" if definite else "paper_submission_uncertain"
+            event = ev + "rejected" if definite else ("paper_submission_uncertain" if scope is None
+                                                     else scope.event_prefix + "_submission_uncertain")
             journal.append(run_id, event, {"client_order_id": client_id, "http_status": exc.status},
                            key=event + ":" + client_id)
             if definite:
                 raise
             raise AmbiguousSubmission("Order submission uncertain; reconcile by client_order_id before proceeding") from exc
-        journal.append(run_id, "paper_order_acknowledged", {"client_order_id": client_id, "order": order},
+        journal.append(run_id, ev + "acknowledged", {"client_order_id": client_id, "order": order},
                        key="ack:" + client_id)
         return order
 
