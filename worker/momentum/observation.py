@@ -174,6 +174,79 @@ def _account_identity(account):
     return identity
 
 
+AUTO_BASELINE_NAME = "accounting-baseline.auto.json"
+_ACCOUNT_NUMBER = __import__("re").compile(r"^[A-Z0-9]{4,24}$")
+
+
+def auto_baseline_path(config):
+    return str(Path(config.db_path).resolve().parent / AUTO_BASELINE_NAME)
+
+
+def auto_opening_baseline(config, provider, *, account_id, batch):
+    """ACCOUNTING_BASELINE_AUTO: an EMPTY opening inventory, proven by the broker, or None.
+
+    Proof (all required, all read from the paper broker with the worker's keys):
+    the activity scan since ACCOUNTING_HISTORY_START is exhausted with no
+    blockers and contains NO fills of any asset class (equity or crypto), and
+    the account has zero positions and zero open orders right now. Flat now
+    plus no fills since the start means the inventory at the start was empty.
+    The proof is written once to ``accounting-baseline.auto.json`` next to the
+    journal and then read back through ``_baseline`` (account and start must
+    match), so later trades do not undo it. Anything else returns None and the
+    ledger keeps ``opening_inventory_unproven``. Never overwrites a file.
+    """
+    if not config.accounting_baseline_auto or config.accounting_baseline_path:
+        return None
+    path = Path(auto_baseline_path(config))
+    window_start = batch.coverage.get("window_start")
+    if path.exists():
+        try:
+            return _baseline(str(path), account_id=account_id, window_start=window_start)
+        except ObservationError:
+            print("accounting: auto baseline on disk does not match this account/start; "
+                  "opening inventory stays unproven", flush=True)
+            return None
+    coverage = batch.coverage
+    if coverage.get("activity_pages_exhausted") is not True or coverage.get("blockers"):
+        return None
+    if coverage.get("environment") != "paper" or coverage.get("account_id") != account_id:
+        return None
+    observations = list(getattr(batch, "observations", ()) or ())
+    if batch.records or any(o.activity_type in {"FILL", "FEE", "CFEE"} or o.kind != "cash" for o in observations):
+        return None  # any fill/fee (stock or crypto) or unclassified activity: no automatic claim
+    try:
+        positions = provider.positions()
+        orders = provider.open_orders()
+    except Exception:
+        return None
+    if not isinstance(positions, list) or not isinstance(orders, list) or positions or orders:
+        return None
+    value = {"schema_version": "1.0", "account_id": account_id, "environment": "paper",
+             "window_start": window_start, "opening_lots": [],
+             "evidence": ("auto: paper broker showed 0 positions, 0 open orders and 0 fills "
+                          f"(all asset classes) from {window_start} to {coverage.get('window_end')} "
+                          f"({len(observations)} non-trade cash activities); empty opening inventory.")}
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with open(tmp, "x", encoding="utf-8") as handle:
+            json.dump(value, handle, sort_keys=True)
+        import os
+        os.link(tmp, path)  # fails if another writer created it first; never overwrite
+    except OSError:
+        return None
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+    print(f"accounting: auto opening baseline proven (empty inventory) for account {account_id} "
+          f"from {window_start}", flush=True)
+    try:
+        return _baseline(str(path), account_id=account_id, window_start=window_start)
+    except ObservationError:
+        return None
+
+
 def _baseline(path, *, account_id, window_start):
     """Read explicit operator evidence, never infer historical flatness today."""
     if not path:
@@ -270,6 +343,7 @@ class ObservationWorker:
         self._latest = None
         self._account_id = None
         self._baseline_cache = None
+        self.paper_account = None
         self._loop_error = None
         self._journal_degraded = False
 
@@ -335,6 +409,15 @@ class ObservationWorker:
                                 key="observation:account-binding", timestamp=self.clock().isoformat())
         self._account_id = identity
         self.session.expected_account_id = identity
+        number = account.get("account_number") if isinstance(account, dict) else None
+        number = number if isinstance(number, str) and _ACCOUNT_NUMBER.fullmatch(number) else None
+        if self.paper_account is None or self.paper_account.get("account_id") != identity:
+            self.paper_account = {"account_id": identity, "account_number": number, "environment": "paper"}
+            key = "observation:account-identity:" + identity + ":" + str(number)
+            if not self.journal.event_by_key(key):
+                self.journal.append("paper-observation", "observation_account_identity", dict(self.paper_account),
+                                    key=key, timestamp=self.clock().isoformat())
+            print(f"paper account bound: id={identity} number={number}", flush=True)
         return identity
 
     def _accounting(self, account_id, cycle_id, started_at):
@@ -351,6 +434,10 @@ class ObservationWorker:
             if self._baseline_cache is None:
                 self._baseline_cache = _baseline(self.config.accounting_baseline_path,
                     account_id=account_id, window_start=coverage["window_start"])
+        elif self.config.accounting_baseline_auto and self._baseline_cache is None:
+            self._baseline_cache = auto_opening_baseline(self.config, self.provider,
+                                                         account_id=account_id, batch=imported)
+        if self._baseline_cache is not None:
             coverage["opening_lots_complete"] = True
             coverage["opening_lots"] = self._baseline_cache["opening_lots"]
             coverage["opening_evidence"] = self._baseline_cache["evidence"]
@@ -702,6 +789,7 @@ class ObservationWorker:
                 "live_execution_supported": False,
                 "live_execution_locked": True,
                 "orders_submitted": 0,
+                "paper_account": dict(self.paper_account) if self.paper_account else None,
             }
         orders = self._acknowledged_stock_orders()
         self.orders_submitted = orders
@@ -712,6 +800,7 @@ class ObservationWorker:
             "live_execution_supported": False,
             "live_execution_locked": True,
             "orders_submitted": orders,
+            "paper_account": dict(self.paper_account) if self.paper_account else None,
         }
         if self.day_trade is not None:
             last = self.day_trade.status()

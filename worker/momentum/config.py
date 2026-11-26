@@ -50,6 +50,15 @@ def flag(value, name):
         raise ConfigError(f"{name} must be true or false")
     return str(value).lower() in {"true", "1"}
 
+def _baseline_auto(raw):
+    value = str(raw or "").strip().lower()
+    if value in {"", "false", "0", "no", "off"}:
+        return False
+    if value in {"true", "1", "yes", "on"}:
+        return True
+    raise ConfigError("ACCOUNTING_BASELINE_AUTO must be true or false")
+
+
 def _day_trade_profile(raw):
     from .day_trade_profiles import normalize
     try:
@@ -98,6 +107,10 @@ class Config:
     owner_user_id: str = ""
     accounting_history_start: str = ""
     accounting_baseline_path: str = ""
+    # ACCOUNTING_BASELINE_AUTO=true: prove an EMPTY opening inventory from the
+    # broker (zero positions, zero open orders, zero fills since the start) and
+    # persist it once next to the journal. Never used with a baseline path.
+    accounting_baseline_auto: bool = False
     accounting_cost_policy: str = "actual"
     # Non-empty only when the optional AI advisor runs in cotrade mode; then it is
     # part of review_hash(), so AI-only paper entries need an explicit re-review.
@@ -176,6 +189,12 @@ class Config:
                 raise ConfigError("ACCOUNTING_HISTORY_START must be a timezone-qualified timestamp") from exc
         if self.accounting_baseline_path and not self.accounting_history_start:
             raise ConfigError("An accounting baseline requires ACCOUNTING_HISTORY_START")
+        if type(self.accounting_baseline_auto) is not bool:
+            raise ConfigError("ACCOUNTING_BASELINE_AUTO must be true or false")
+        if self.accounting_baseline_auto and not self.accounting_history_start:
+            raise ConfigError("ACCOUNTING_BASELINE_AUTO requires ACCOUNTING_HISTORY_START")
+        if self.accounting_baseline_auto and self.accounting_baseline_path:
+            raise ConfigError("Use ACCOUNTING_BASELINE_PATH or ACCOUNTING_BASELINE_AUTO, not both")
         try:
             from .risk import RiskConfig
             _strategy(self.strategy_overrides)
@@ -241,6 +260,7 @@ class Config:
                 owner_user_id=env.get("OWNER_USER_ID", ""),
                 accounting_history_start=env.get("ACCOUNTING_HISTORY_START", ""),
                 accounting_baseline_path=env.get("ACCOUNTING_BASELINE_PATH", ""),
+                accounting_baseline_auto=_baseline_auto(env.get("ACCOUNTING_BASELINE_AUTO", "")),
                 accounting_cost_policy=env.get("ACCOUNTING_COST_POLICY", "actual"),
                 ai_cotrade=_ai_cotrade(env),
                 ai_paper_execute=_ai_paper_execute(env),
@@ -324,6 +344,9 @@ class Config:
                 "pairs": list(self.crypto_watchlist),
                 "time_in_force": ["gtc", "ioc"],
             }
+        # Absent unless enabled, so existing reviewed hashes are unchanged.
+        if self.accounting_baseline_auto:
+            settings["accounting_baseline_auto"] = "empty_inventory_proven_by_broker_v1"
         # Off by default and absent from the hash, so today's reviewed hash is unchanged.
         if self.day_trade_profile:
             from .day_trade_profiles import hash_settings
@@ -357,6 +380,7 @@ class Config:
             "supabase_publisher_configured": bool(self.supabase_url and self.supabase_service_role_key and self.owner_user_id),
             "accounting_history_start": self.accounting_history_start or None,
             "accounting_baseline_configured": bool(self.accounting_baseline_path),
+            "accounting_baseline_auto": bool(self.accounting_baseline_auto),
             "accounting_cost_policy": self.accounting_cost_policy,
             "ai_cotrade_reviewed_settings": dict(self.ai_cotrade) or None,
             "ai_paper_execute_reviewed_settings": dict(self.ai_paper_execute) or None,

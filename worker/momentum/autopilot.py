@@ -20,7 +20,7 @@ from .customer_settings import PaperSettingsBinding, SettingsBindingError
 from .journal import Journal
 from .ledger import AccountingLedger
 from .models import NY
-from .observation import _account_identity, _baseline
+from .observation import _account_identity, _baseline, auto_opening_baseline
 from .session import PaperSession
 
 
@@ -55,9 +55,13 @@ class ExecutionAccounting:
         keys = ("account_id", "environment", "source", "window_start", "window_end", "as_of",
                 "executions_complete", "fees_complete", "opening_lots_complete", "opening_lots", "evidence", "blockers")
         coverage = {k: deepcopy(batch.coverage[k]) for k in keys}
+        baseline = None
         if cfg.accounting_baseline_path:
             baseline = _baseline(cfg.accounting_baseline_path, account_id=account_id,
                                  window_start=coverage["window_start"])
+        elif cfg.accounting_baseline_auto:
+            baseline = auto_opening_baseline(cfg, self.provider, account_id=account_id, batch=batch)
+        if baseline is not None:
             coverage.update(opening_lots_complete=True, opening_lots=baseline["opening_lots"],
                             opening_evidence=baseline["evidence"])
         certification = certify_import(self.provider, batch, account_id=account_id,

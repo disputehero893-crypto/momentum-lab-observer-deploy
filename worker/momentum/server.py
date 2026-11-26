@@ -128,7 +128,18 @@ class Application:
             # Latch state and reviewed-configuration status only; no values or secrets.
             "kill_switch": control_report(self.journal),
             "paper_config_hash_status": config_report(self.config)["hash_status"],
+            # Non-secret identity of the bound paper account (id + account number).
+            "paper_account": self._paper_account(paper_status),
+            **({"day_trade_session": paper_status["day_trade_session"]}
+               if isinstance(paper_status, dict) and paper_status.get("day_trade_session") else {}),
         }
+
+    def _paper_account(self, paper_status):
+        if isinstance(paper_status, dict) and paper_status.get("paper_account"):
+            return paper_status["paper_account"]
+        worker = self.observation_worker
+        account = getattr(worker, "paper_account", None) if worker is not None else None
+        return dict(account) if isinstance(account, dict) else None
 
     def readiness(self):
         if self.paper_worker is not None and self.autopilot is None:
