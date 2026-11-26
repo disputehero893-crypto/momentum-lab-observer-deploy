@@ -250,3 +250,36 @@ listings only); current float, not point-in-time; the live scanner only sees
 Alpaca's top movers from 09:30 ET while the replay sees every qualifying stock;
 no news filter; modelled fills (no halts, partial fills or SSR). Read this as
 "the profile trades rarely and lost money in a short sample", not as a verdict.
+
+## Runtime: the separate day-trade equity session (`momentum/day_trade_session.py`)
+
+`small_cap_candle_patterns_iex_v1` is wired into `serve-paper` as its own session. The other two profiles are still not wired and still block stock entries when selected.
+
+- **Where it runs.** It runs inside the same `ObservationWorker` cycle, after the large-cap session. It uses the same paper client (paper-api only), journal, kill switch and session ledger. It is built only when the command is `serve-paper` and `DAY_TRADE_PROFILE=small_cap_candle_patterns_iex_v1`. `serve-observe` never builds it.
+- **Scope.** It works the same way #65 segregates crypto.
+  - It trades only symbols outside `WATCHLIST`, never crypto, and regular-session limit orders only (`extended_hours=false`).
+  - Its orders use their own journal events (`day_trade_order_*`). Its own checks cover only its own symbols: owned positions against broker positions, and unowned open orders.
+  - The large-cap session now leaves crypto rows and day-trade-owned rows out of its own position and open-order check. A truly unknown equity position still blocks it.
+- **Data.** `build_provider_set(env)` supplies FMP float, the Alpaca movers scanner and Alpaca news. Bars are IEX 1-minute bars from the paper client: a backfill from 09:30 ET for a new symbol, then a bounded 9-minute window each cycle, for at most 9 symbols.
+- **Missing providers.** A missing `DAY_TRADE_DATA_PROVIDERS_ENABLED`, `FMP_API_KEY` or Alpaca keys blocks only this session. The session reports `float_provider_missing` / `gainers_scanner_missing` in `/health` under `paper_execution.day_trade_session` and in `/ready`. These are not in `Config.paper_blockers()`, so large-cap and crypto orders are unaffected.
+- **Risk.**
+  - Engine caps are clamped to `RiskConfig`: $25 per trade, $75 per day, $1,000 notional, one position, 3-loss halt and 5 trades a day.
+  - Every entry also goes through #8 `check_paper_intent`, with account-wide stock exposure and position count (large-cap included) and the shared realized-P&L ledger.
+  - The large-cap entry screen also counts the day-trade session's exposure.
+- **Exits.** Protective exits are never screened. They are limit-at-bid sells and are repriced after 60 s. They run even when entries are halted.
+- **Stop watch.** Between bars the stop is also watched on the live bid.
+- **Approved profiles.** `small_cap_candle_patterns_iex_v1` is in `APPROVED_PAPER_PROFILES`. The large-cap submit path still requires the large-cap strategy config id and watchlist, so it cannot place candle orders.
+
+### Arming (together with serve-paper; needs Derek's yes)
+
+These env keys are in addition to the serve-paper/accounting ones:
+
+| Key | Value |
+| --- | --- |
+| `DAY_TRADE_PROFILE` | `small_cap_candle_patterns_iex_v1` |
+| `DAY_TRADE_DATA_PROVIDERS_ENABLED` | `true` |
+| `FMP_API_KEY` | secret (FMP Starter key; never logged) |
+| `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` | already set (movers + news use the same paper keys) |
+| `PAPER_REVIEWED_CONFIG_HASH` | recompute with `Config.from_env().review_hash()` on the FINAL env |
+
+Selecting the profile changes the reviewed hash. The provider flag and keys do not. Offline, the hosted shape with Gemini `paper_execute`, `PAPER_TRADING_ENABLED=true` and the candle profile, with no accounting vars yet, gives `eca2da8213d57ab1c1605c91ce0814e706b71241f6475effe9bf33138fb75177`. Adding `ACCOUNTING_HISTORY_START` changes it again.

@@ -92,6 +92,8 @@ def record_crypto_paper(worker, logger, result):
         reason = str(decision.get("reason") or "unknown")
         base = {"symbol": pair, "asset_class": "crypto", "rule": decision.get("rule"),
                 "reason": reason, **_window_payload(decision)}
+        if isinstance(decision.get("detail"), str) and decision["detail"]:
+            base["detail"] = decision["detail"][:80]
         if action in {"buy", "sell"}:
             order_id = str(decision.get("client_order_id") or (cycle_id + ":" + str(index)))
             signal = dict(base, side=action, pattern=reason, price=decision.get("price"))

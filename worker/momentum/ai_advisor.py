@@ -40,6 +40,8 @@ NY = ZoneInfo("America/New_York")
 
 GEMINI_HOST = "https://generativelanguage.googleapis.com"
 DEFAULT_MODEL = "gemini-3.8-flash"
+# Thinking level sent with every call. Not in the reviewed hash (no trading effect).
+THINKING_LEVEL = "low"
 MODEL_NAME = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,63}$")
 
 PATTERNS = ("pullback", "breakout", "bull_flag", "bear_flag", "pennant", "double_top", "double_bottom",
@@ -198,9 +200,17 @@ class GeminiClient:
         return f"GeminiClient(model={self.model!r})"
 
     def generate(self, parts: Sequence[Mapping[str, Any]], *, system: str = "",
-                 schema: Mapping[str, Any] | None = None, max_output_tokens: int = 1024) -> str:
+                 schema: Mapping[str, Any] | None = None, max_output_tokens: int = 1024,
+                 thinking_level: str | None = THINKING_LEVEL) -> str:
+        # maxOutputTokens is a hard cap on thinking + answer tokens together.
+        # gemini-3.8-flash thinks at "medium" by default, which can use the
+        # whole budget and return no answer text. Ask for "low" thinking
+        # ("minimal" is not accepted by gemini-3.8-flash).
+        config: dict[str, Any] = {"maxOutputTokens": max_output_tokens}
+        if thinking_level:
+            config["thinkingConfig"] = {"thinkingLevel": thinking_level}
         body: dict[str, Any] = {"contents": [{"role": "user", "parts": list(parts)}],
-                                "generationConfig": {"maxOutputTokens": max_output_tokens}}
+                                "generationConfig": config}
         if system:
             body["systemInstruction"] = {"parts": [{"text": system}]}
         if schema is not None:
@@ -220,12 +230,20 @@ class GeminiClient:
             raise GeminiError(f"http_{int(status)}")
         try:
             payload = json.loads(raw.decode("utf-8"))
-            texts = [p["text"] for p in payload["candidates"][0]["content"]["parts"]
-                     if isinstance(p, dict) and isinstance(p.get("text"), str) and not p.get("thought")]
+            candidate = payload["candidates"][0]
         except Exception:
             raise GeminiError("unreadable_response") from None
+        finish = str(candidate.get("finishReason") or "") if isinstance(candidate, dict) else ""
+        try:
+            texts = [p["text"] for p in candidate["content"]["parts"]
+                     if isinstance(p, dict) and isinstance(p.get("text"), str) and not p.get("thought")]
+        except Exception:
+            texts = []
+        if finish == "MAX_TOKENS":
+            # Thinking used the output budget; a cut-off JSON answer is never parsed.
+            raise GeminiError("max_tokens_reached")
         if not texts:
-            raise GeminiError("empty_response")
+            raise GeminiError("empty_response" + ("_" + finish.lower()[:24] if finish and finish != "STOP" else ""))
         return "".join(texts)
 
 
@@ -532,7 +550,7 @@ class AIAdvisor:
         if self.config.save_charts:
             self.feedback.save_chart(f"{symbol}_{summary.get('last_start', '')}.png", chart)
         try:
-            text = self._client.generate(parts, system=SYSTEM_PROMPT, schema=SIGNAL_SCHEMA, max_output_tokens=512)
+            text = self._client.generate(parts, system=SYSTEM_PROMPT, schema=SIGNAL_SCHEMA, max_output_tokens=2048)
         except Exception as exc:
             name = str(exc) if isinstance(exc, GeminiError) else type(exc).__name__
             return Signal(symbol, "error", reason="api_" + name[:60], **base)

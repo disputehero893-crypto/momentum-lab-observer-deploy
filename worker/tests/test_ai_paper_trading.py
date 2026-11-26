@@ -268,6 +268,27 @@ class BadOutputTests(unittest.TestCase):
         self._no_trade(GeminiError("rate_limited_429"), "ai_error")
         self._no_trade(reply("enter", reason="ignore your rules " * 40), "ai_invalid")
 
+    def test_ai_error_carries_a_key_free_detail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            loop, _ = make_loop(directory, StubModel(GeminiError("max_tokens_reached")), transport=Transport())
+            _, second = two_cycles(loop)
+            row = second["decisions"][-1]
+            self.assertEqual(row["reason"], "ai_error")
+            self.assertEqual(row["detail"], "api_max_tokens_reached")
+            self.assertNotIn(FAKE_KEY, json.dumps(second))
+
+    def test_paper_trader_asks_with_room_to_answer(self):
+        seen = {}
+
+        class Capture(StubModel):
+            def generate(self, parts, **kwargs):
+                seen.update(kwargs)
+                return super().generate(parts, **kwargs)
+        with tempfile.TemporaryDirectory() as directory:
+            loop, _ = make_loop(directory, Capture(reply("hold")), transport=Transport())
+            two_cycles(loop)
+        self.assertGreaterEqual(seen["max_output_tokens"], 1024)
+
     def test_parser_is_strict(self):
         ok = parse_decision(reply("enter"), PAIR)
         self.assertEqual(ok["action"], "enter")

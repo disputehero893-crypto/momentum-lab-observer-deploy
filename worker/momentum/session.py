@@ -150,6 +150,12 @@ class PaperSession:
         account_received_at = self.clock()
         actual_positions = self.provider.positions()
         open_orders = self.provider.open_orders()
+        # Crypto-loop and day-trade-session rows share this paper account but
+        # are reconciled by their owners (the #65 segregation idea). Only the
+        # large-cap session's own scope is checked here.
+        foreign_position, foreign_order = self._foreign_filters()
+        actual_positions = [row for row in actual_positions if not foreign_position(row)]
+        open_orders = [row for row in open_orders if not foreign_order(row)]
         observed_at = self.clock()
         errors = []
         if self.expected_account_id is not None and account.get("id") != self.expected_account_id:
@@ -270,6 +276,10 @@ class PaperSession:
                 "account_received_at": account_received_at.isoformat(), "evidence_collected_at": self.clock().isoformat(),
                 "errors": sorted(set(errors)), "reconciled": not errors}
 
+    def _foreign_filters(self):
+        from .day_trade_session import day_trade_claims, foreign_filter
+        return foreign_filter(self.config.watchlist, day_trade_claims(self.journal))
+
     def _screen_equity_entry(self, intent, snapshot, evidence, account):
         """Run PR #8's check_paper_intent on one stock entry before submit.
 
@@ -293,6 +303,12 @@ class PaperSession:
                 limit = Decimal(str(order.get("limit_price") or "0"))
                 if remaining > 0 and limit > 0:
                     exposure += remaining * limit
+            external = getattr(self, "external_exposure", None)
+            if external is not None:
+                # Account-wide stock caps: the day-trade session's exposure counts too.
+                extra_exposure, extra_positions = external()
+                exposure += Decimal(str(extra_exposure))
+                open_positions += int(extra_positions)
             realized = Decimal(str(account.get("realized_pnl")))
             quote = snapshot.get("quote") or {}
             now = self.clock()

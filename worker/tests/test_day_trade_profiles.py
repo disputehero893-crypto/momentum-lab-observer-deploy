@@ -54,7 +54,8 @@ class OffByDefaultTests(unittest.TestCase):
         # Even if something handed it an intent, the unchanged RiskManager rejects the new profile ids.
         self.assertNotIn("large_cap_day_trade_v1", APPROVED_PAPER_PROFILES)
         self.assertNotIn("ross_cameron_small_cap_v1", APPROVED_PAPER_PROFILES)
-        self.assertNotIn("small_cap_candle_patterns_iex_v1", APPROVED_PAPER_PROFILES)
+        # The candle profile is approved, but only its own day-trade session can submit it.
+        self.assertIn("small_cap_candle_patterns_iex_v1", APPROVED_PAPER_PROFILES)
         now = datetime(2026, 11, 23, 15, 0, tzinfo=timezone.utc)
         account = {"session_date": "2026-11-23", "equity": "100000", "buying_power": "100000",
                    "realized_pnl": "0", "unrealized_pnl": "0", "fees": "0", "position_qty": 0,
@@ -106,11 +107,17 @@ class SelectedProfileTests(unittest.TestCase):
     def test_selecting_candle_iex_profile_allows_iex_and_needs_float_and_scanner(self):
         cfg = Config.from_env({**HOSTED_SHAPE_ENV, "DAY_TRADE_PROFILE": "small_cap_candle_patterns_iex_v1"})
         self.assertEqual(cfg.data_feed, "iex")
+        # Wired: missing providers block only the day-trade session, never the
+        # account-wide paper_blockers() that also gate large-cap and crypto orders.
         blockers = cfg.paper_blockers()
-        for reason in ("day_trade_profile_runtime_not_wired", "float_provider_missing", "gainers_scanner_missing"):
-            self.assertIn(reason, blockers)
-        for reason in ("catalyst_provider_missing", "requires_sip_or_full_tape_feed", "data_feed_must_be_iex_or_sip"):
+        for reason in ("day_trade_profile_runtime_not_wired", "float_provider_missing", "gainers_scanner_missing",
+                       "catalyst_provider_missing", "requires_sip_or_full_tape_feed", "data_feed_must_be_iex_or_sip"):
             self.assertNotIn(reason, blockers)
+        session_blockers = dtp.blockers("small_cap_candle_patterns_iex_v1", data_feed="iex")
+        self.assertEqual(session_blockers, ["float_provider_missing", "gainers_scanner_missing"])
+        report = cfg.public()["day_trade_profile"]
+        self.assertFalse(report["active"])
+        self.assertIn("float_provider_missing", report["blockers"])
         self.assertEqual(cfg.review_hash(), CANDLE_IEX_HOSTED_SHAPE_HASH)
         block = dtp.hash_settings("small_cap_candle_patterns_iex_v1", {}, "iex")
         self.assertEqual((block["universe"], block["feed"]), (["alpaca_movers_scanner"], "iex"))

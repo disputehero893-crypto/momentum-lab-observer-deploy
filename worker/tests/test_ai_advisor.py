@@ -48,7 +48,7 @@ class FakeGemini:
         self.error = error
         self.calls = []
 
-    def generate(self, parts, *, system="", schema=None, max_output_tokens=1024):
+    def generate(self, parts, *, system="", schema=None, max_output_tokens=1024, **kwargs):
         self.calls.append({"parts": parts, "system": system, "schema": schema})
         if self.error:
             raise self.error
@@ -162,6 +162,31 @@ class GeminiClientTests(unittest.TestCase):
         inline = seen["body"]["contents"][0]["parts"][1]["inlineData"]
         self.assertEqual((inline["mimeType"], base64.b64decode(inline["data"])), ("image/png", b"PNG"))
         self.assertNotIn("secret-key", repr(client))
+
+    def test_low_thinking_and_answer_budget(self):
+        # gemini-3.8-flash thinks at "medium" by default and maxOutputTokens
+        # covers thinking + answer, so every call sends thinkingLevel "low".
+        send, seen = self.transport()
+        GeminiClient("k", "gemini-3.8-flash", transport=send).generate([{"text": "x"}], max_output_tokens=2048)
+        gen = seen["body"]["generationConfig"]
+        self.assertEqual(gen["thinkingConfig"], {"thinkingLevel": "low"})
+        self.assertEqual(gen["maxOutputTokens"], 2048)
+        self.assertNotEqual(aa.THINKING_LEVEL, "minimal")  # not accepted by gemini-3.8-flash
+        send, seen = self.transport()
+        GeminiClient("k", transport=send).generate([{"text": "x"}], thinking_level=None)
+        self.assertNotIn("thinkingConfig", seen["body"]["generationConfig"])
+
+    def test_max_tokens_is_a_named_error(self):
+        truncated = json.dumps({"candidates": [{"finishReason": "MAX_TOKENS",
+                                                "content": {"parts": [{"text": '{"pair": "BTC'}]}}]})
+        no_parts = json.dumps({"candidates": [{"finishReason": "MAX_TOKENS", "content": {"role": "model"}}]})
+        safety = json.dumps({"candidates": [{"finishReason": "SAFETY"}]})
+        for body, code in ((truncated, "max_tokens_reached"), (no_parts, "max_tokens_reached"),
+                           (safety, "empty_response_safety")):
+            send, _ = self.transport(body=body)
+            with self.assertRaises(GeminiError) as caught:
+                GeminiClient("k", transport=send).generate([{"text": "x"}])
+            self.assertEqual(str(caught.exception), code)
 
     def test_errors_are_sanitized(self):
         cases = [(self.transport(429)[0], "rate_limited_429"), (self.transport(500)[0], "http_500"),

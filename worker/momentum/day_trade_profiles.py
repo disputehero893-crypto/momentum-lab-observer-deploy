@@ -31,8 +31,12 @@ ROSS_CAMERON = ross.PROFILE_ID
 CANDLE_IEX = candle.PROFILE_ID
 PROFILE_IDS = (LARGE_CAP, ROSS_CAMERON, CANDLE_IEX)
 DEFAULT_PROFILE = ""  # off
-# Flipped only by the reviewed follow-up that wires the engines into the paper loop.
-RUNTIME_WIRED = False
+# Profiles with a runtime in serve-paper. ``small_cap_candle_patterns_iex_v1``
+# runs in its own day-trade equity session (``day_trade_session``), separate
+# from the large-cap watchlist session and the crypto loop. The other profiles
+# are still not wired and keep blocking stock entries when selected.
+WIRED_PROFILES = frozenset({CANDLE_IEX})
+RUNTIME_WIRED = False  # True only when every profile is wired
 REFERENCE_EQUITY = Decimal("100000")
 
 
@@ -78,7 +82,7 @@ def blockers(profile: str, *, watchlist: Iterable[str] = (), data_feed: str = "i
     if not profile:
         return []
     reasons = []
-    if not RUNTIME_WIRED:
+    if profile not in WIRED_PROFILES:
         reasons.append("day_trade_profile_runtime_not_wired")
     if profile == LARGE_CAP:
         symbols = set(watchlist)
@@ -93,6 +97,18 @@ def blockers(profile: str, *, watchlist: Iterable[str] = (), data_feed: str = "i
     elif profile == CANDLE_IEX:
         reasons.extend(candle.provider_blockers(providers, data_feed))
     return reasons
+
+
+def global_blockers(profile: str, *, watchlist: Iterable[str] = (), data_feed: str = "iex") -> list[str]:
+    """Blockers that belong in ``Config.paper_blockers()`` (they stop every paper order).
+
+    A wired profile runs in its own session and reports its own provider
+    blockers there, so a missing FMP key or movers scanner never stops the
+    large-cap or crypto orders. Unwired profiles keep blocking as before.
+    """
+    if not profile or profile in WIRED_PROFILES:
+        return []
+    return blockers(profile, watchlist=watchlist, data_feed=data_feed)
 
 
 def report(profile: str, *, watchlist: Iterable[str] = (), data_feed: str = "iex",
