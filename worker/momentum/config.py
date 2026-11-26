@@ -45,6 +45,13 @@ def flag(value, name):
         raise ConfigError(f"{name} must be true or false")
     return str(value).lower() in {"true", "1"}
 
+def _day_trade_profile(raw):
+    from .day_trade_profiles import normalize
+    try:
+        return normalize(raw)
+    except ValueError as exc:
+        raise ConfigError(str(exc)) from exc
+
 @dataclass(frozen=True)
 class Config:
     mode: str = "demo"
@@ -64,6 +71,9 @@ class Config:
     oanda_practice_orders_enabled: bool = False
     forex_watchlist: tuple = ()  # optional read-only practice forex, never stock strategy inputs
     forex_risk_overrides: dict = field(default_factory=dict)
+    # Opt-in stock day-trade profile (DAY_TRADE_PROFILES.md). Empty = off: the
+    # default strategy runs and the reviewed hash is unchanged.
+    day_trade_profile: str = ""
     db_path: str = "./data/momentum.sqlite3"
     export_dir: str = "./exports"
     metadata_path: str = "./symbol_metadata.json"
@@ -124,6 +134,13 @@ class Config:
             ForexRiskConfig(**self.forex_risk_overrides)
         except (TypeError, ValueError, ArithmeticError) as exc:
             raise ConfigError("OANDA practice forex settings are invalid") from exc
+        try:
+            from .day_trade_profiles import normalize
+            if normalize(self.day_trade_profile) != self.day_trade_profile:
+                raise ValueError
+        except ValueError as exc:
+            raise ConfigError("DAY_TRADE_PROFILE must be empty, large_cap_day_trade_v1, ross_cameron_small_cap_v1 "
+                              "or small_cap_candle_patterns_iex_v1") from exc
         if not 1 <= self.port <= 65535:
             raise ConfigError("PORT must be between 1 and 65535")
         if not 0 <= self.journal_sample_seconds <= 3600:
@@ -198,6 +215,7 @@ class Config:
                 oanda_practice_orders_enabled=flag(env.get("OANDA_PRACTICE_ORDERS_ENABLED"), "OANDA_PRACTICE_ORDERS_ENABLED"),
                 forex_watchlist=forex_watchlist,
                 forex_risk_overrides=obj("OANDA_FOREX_RISK_CONFIG_JSON"),
+                day_trade_profile=_day_trade_profile(env.get("DAY_TRADE_PROFILE", "")),
                 db_path=env.get("JOURNAL_PATH", "./data/momentum.sqlite3"),
                 export_dir=env.get("EXPORT_DIR", "./exports"),
                 metadata_path=env.get("SYMBOL_METADATA_PATH", "./symbol_metadata.json"),
@@ -222,6 +240,11 @@ class Config:
             if isinstance(exc, ConfigError):
                 raise
             raise ConfigError("Invalid numeric worker configuration") from exc
+
+    def _day_trade_report(self):
+        from .day_trade_profiles import report
+        return report(self.day_trade_profile, watchlist=self.watchlist, data_feed=self.data_feed,
+                      risk_overrides=self.risk_overrides)
 
     def paper_blockers(self):
         reasons = []
@@ -251,6 +274,9 @@ class Config:
                 reasons.append("oanda_practice_credentials_missing")
         if self.crypto_paper_execution_enabled and not self.crypto_watchlist:
             reasons.append("crypto_watchlist_missing")
+        if self.day_trade_profile:
+            from .day_trade_profiles import blockers
+            reasons.extend(blockers(self.day_trade_profile, watchlist=self.watchlist, data_feed=self.data_feed))
         if self.paper_reviewed_config_hash != self.review_hash():
             reasons.append("exact_paper_configuration_not_reviewed")
         return reasons
@@ -287,6 +313,10 @@ class Config:
                 "pairs": list(self.crypto_watchlist),
                 "time_in_force": ["gtc", "ioc"],
             }
+        # Off by default and absent from the hash, so today's reviewed hash is unchanged.
+        if self.day_trade_profile:
+            from .day_trade_profiles import hash_settings
+            settings["day_trade_profile"] = hash_settings(self.day_trade_profile, self.risk_overrides, self.data_feed)
         return sha256(json.dumps(settings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def public(self):
@@ -305,6 +335,7 @@ class Config:
             "oanda_practice_rest_host": "api-fxpractice.oanda.com",
             "oanda_practice_stream_host": "stream-fxpractice.oanda.com",
             "strategy_preset": _strategy(self.strategy_overrides).preset,
+            "day_trade_profile": self._day_trade_report(),
             "quote_max_age_seconds": self.quote_max_age_seconds,
             "order_ttl_seconds": self.order_ttl_seconds,
             "strategy_overrides": self.strategy_overrides, "risk_overrides": self.risk_overrides,

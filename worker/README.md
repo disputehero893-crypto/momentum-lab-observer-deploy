@@ -61,6 +61,8 @@ Hosted observe uses `serve-observe` with `MOMENTUM_MODE=paper`,
 `PAPER_TRADING_ENABLED=false`. Do not flip trading on without Derek's yes in
 chat. Strategy defaults: [STRATEGY_PRESETS.md](STRATEGY_PRESETS.md). Paper run
 logging: [PAPER_RUN_LOGGING.md](PAPER_RUN_LOGGING.md).
+Opt-in stock day-trade profiles (`DAY_TRADE_PROFILE`, both off by default):
+[DAY_TRADE_PROFILES.md](DAY_TRADE_PROFILES.md).
 
 ## What is implemented
 

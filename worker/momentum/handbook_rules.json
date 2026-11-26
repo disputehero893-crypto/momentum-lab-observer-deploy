@@ -1,0 +1,1052 @@
+{
+ "schema_version": 1,
+ "handbook_version": "2026-11-26.2",
+ "title": "TactiRise trading handbook rules",
+ "disclaimer": "Educational research for a paper-trading system. Not financial advice. No rule here is a promise of profit. The code's risk limits always win over this file.",
+ "notes": [
+  "Reference data only. Nothing in the worker reads this file to decide or size a trade, and it is not part of PAPER_REVIEWED_CONFIG_HASH.",
+  "Derek's rules come first. Each rule names where it came from and whether main enforces it.",
+  "status: enforced = main does it; enforced_stricter = main does something tighter; partial = main covers part of it; differs = main does something different; not_on_main = only in draft PR #14; in_profile_off = implemented in an opt-in day-trade profile that is OFF by default (DAY_TRADE_PROFILE), so main's default strategy does not use it yet; guidance = research advice, not code; informational = background fact."
+ ],
+ "sources": {
+  "D01": {
+   "title": "Stock day-trade rules for Derek: draft PR #14 (worker/momentum/largecap_v1.py, worker/PAPER_TRADING.md) and the ChatGPT chat 'Day Trading Strategies Comparison' it credits (read 2026-11-26; the bot's v1 rules are a custom large-cap adaptation).",
+   "url": "https://github.com/disputehero893-crypto/momentum-lab-observer/pull/14",
+   "kind": "derek"
+  },
+  "D02": {
+   "title": "TactiRise Desk standing rules from Derek (paper trading only, no live mode, no spend without his yes)",
+   "url": "",
+   "kind": "derek"
+  },
+  "D03": {
+   "title": "Derek's concurrent rules + AI design (2026-11-23 8:13 PM CT): AI-only entries become a deterministic intent and pass the unchanged RiskManager",
+   "url": "https://github.com/disputehero893-crypto/momentum-lab-observer/pull/52",
+   "kind": "derek"
+  },
+  "D04": {
+   "title": "Owner-approved product direction (Lovable project knowledge, 2026-10-19): untrusted web text cannot change active strategies, credentials or risk limits; never call a strategy proven without evidence",
+   "url": "",
+   "kind": "derek"
+  },
+  "S01": {
+   "title": "FINRA Regulatory Notice 26-10: intraday margin standards replace pattern day trader rules (effective 2026-06-04)",
+   "url": "https://www.finra.org/rules-guidance/notices/26-10",
+   "kind": "regulator"
+  },
+  "S02": {
+   "title": "SEC Release 34-105226 approving SR-FINRA-2025-017",
+   "url": "https://www.sec.gov/files/rules/sro/finra/2026/34-105226.pdf",
+   "kind": "regulator"
+  },
+  "S03": {
+   "title": "Alpaca: FINRA retires the PDT rule, new intraday margin framework",
+   "url": "https://alpaca.markets/blog/finra-retires-the-pdt-rule-introducing-alpacas-new-intraday-margin-framework/",
+   "kind": "broker"
+  },
+  "S04": {
+   "title": "Alpaca docs: Paper Trading",
+   "url": "https://docs.alpaca.markets/us/docs/paper-trading",
+   "kind": "broker"
+  },
+  "S05": {
+   "title": "SEC: Day Trading: Your Dollars at Risk",
+   "url": "https://www.sec.gov/investor/pubs/daytips.htm",
+   "kind": "regulator"
+  },
+  "S06": {
+   "title": "Barber, Lee, Liu, Odean (2014), The cross-section of speculator skill: Evidence from day trading, Journal of Financial Markets 18",
+   "url": "https://doi.org/10.1016/j.finmar.2013.05.006",
+   "kind": "peer_reviewed"
+  },
+  "S07": {
+   "title": "Chague, De-Losso, Giovannetti (2020), Day Trading for a Living?, SSRN 3423101",
+   "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3423101",
+   "kind": "working_paper"
+  },
+  "S08": {
+   "title": "Barber, Odean (2000), Trading Is Hazardous to Your Wealth, Journal of Finance 55(2)",
+   "url": "https://doi.org/10.1111/0022-1082.00226",
+   "kind": "peer_reviewed"
+  },
+  "S09": {
+   "title": "Odean (1998), Are Investors Reluctant to Realize Their Losses?, Journal of Finance 53(5)",
+   "url": "https://doi.org/10.1111/0022-1082.00072",
+   "kind": "peer_reviewed"
+  },
+  "S10": {
+   "title": "Zarattini, Aziz (2023, rev. 2025), Can Day Trading Really Be Profitable? (5-minute ORB on QQQ), SSRN 4416622",
+   "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4416622",
+   "kind": "working_paper"
+  },
+  "S11": {
+   "title": "Zarattini, Aziz, Barbon (2024), Beat the Market: An Effective Intraday Momentum Strategy for SPY, SSRN 4824172",
+   "url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=4824172",
+   "kind": "working_paper"
+  },
+  "S12": {
+   "title": "Gao, Han, Li, Zhou (2018), Market intraday momentum, Journal of Financial Economics 129(2)",
+   "url": "https://ideas.repec.org/a/eee/jfinec/v129y2018i2p394-414.html",
+   "kind": "peer_reviewed"
+  },
+  "S13": {
+   "title": "Krueger Algorithms replications of the ORB and intraday-momentum papers (independent, not peer reviewed)",
+   "url": "https://kruegeralgorithms.com/en/research/opening-range-breakout-paper-replication",
+   "kind": "practitioner"
+  },
+  "S14": {
+   "title": "Heston, Korajczyk, Sadka (2010), Intraday Patterns in the Cross-section of Stock Returns, Journal of Finance 65(4)",
+   "url": "https://doi.org/10.1111/j.1540-6261.2010.01573.x",
+   "kind": "peer_reviewed"
+  },
+  "S15": {
+   "title": "Lou, Polk, Skouras (2019), A tug of war: Overnight versus intraday expected returns, Journal of Financial Economics 134(1)",
+   "url": "https://doi.org/10.1016/j.jfineco.2019.03.011",
+   "kind": "peer_reviewed"
+  },
+  "S16": {
+   "title": "Novy-Marx, Velikov (2016), A Taxonomy of Anomalies and Their Trading Costs, Review of Financial Studies 29(1)",
+   "url": "https://doi.org/10.1093/rfs/hhv063",
+   "kind": "peer_reviewed"
+  },
+  "S17": {
+   "title": "Bailey, Borwein, Lopez de Prado, Zhu (2017), The Probability of Backtest Overfitting, Journal of Computational Finance 20(4)",
+   "url": "https://doi.org/10.21314/jcf.2016.322",
+   "kind": "peer_reviewed"
+  },
+  "S18": {
+   "title": "Harvey, Liu, Zhu (2016), ...and the Cross-Section of Expected Returns, Review of Financial Studies 29(1)",
+   "url": "https://doi.org/10.1093/rfs/hhv059",
+   "kind": "peer_reviewed"
+  },
+  "S19": {
+   "title": "Berkowitz, Logue, Noser (1988), The Total Cost of Transactions on the NYSE, Journal of Finance 43(1) (origin of the VWAP benchmark)",
+   "url": "https://doi.org/10.1111/j.1540-6261.1988.tb02591.x",
+   "kind": "peer_reviewed"
+  },
+  "S20": {
+   "title": "17 CFR 5.9, security deposits for retail forex (2% majors = 50:1, 5% others = 20:1)",
+   "url": "https://www.ecfr.gov/current/title-17/chapter-I/part-5/section-5.9",
+   "kind": "regulator"
+  },
+  "S21": {
+   "title": "ESMA product intervention on CFDs: 74-89% of retail CFD accounts lose money; leverage caps 30:1 majors to 2:1 crypto",
+   "url": "https://www.esma.europa.eu/press-news/esma-news/esma-agrees-prohibit-binary-options-and-restrict-cfds-protect-retail-investors",
+   "kind": "regulator"
+  },
+  "S22": {
+   "title": "BIS Triennial Central Bank Survey 2025: FX turnover about $9.6 trillion a day",
+   "url": "https://www.bis.org/media-releases/20250930-global-fx-trading-hits-96-trillion-day-april-2025-and-otc-interest-rate-derivatives-surge-79",
+   "kind": "official_statistics"
+  },
+  "S23": {
+   "title": "OANDA hours of operation (Sun 17:05 to Fri 16:59 New York; daily break 16:59-17:05)",
+   "url": "https://www.oanda.com/us-en/trading/hours-of-operation/",
+   "kind": "broker"
+  },
+  "S24": {
+   "title": "OANDA: impact of market conditions on spreads",
+   "url": "https://help.oanda.com/us/en/faqs/market-conditions-spreads-impact.htm",
+   "kind": "broker"
+  },
+  "S25": {
+   "title": "Alpaca docs: Crypto spot trading fees (0.15% maker / 0.25% taker at the lowest tier)",
+   "url": "https://docs.alpaca.markets/us/docs/crypto-fees",
+   "kind": "broker"
+  },
+  "S26": {
+   "title": "Liu, Tsyvinski (2021), Risks and Returns of Cryptocurrency, Review of Financial Studies 34(6)",
+   "url": "https://academic.oup.com/rfs/article-abstract/34/6/2689/5912024",
+   "kind": "peer_reviewed"
+  },
+  "L01": {
+   "title": "TactiRise Strategy Lab: liquid_large_cap_iex_v1 had 0 trades in 12 months on free IEX; v2 about 2 trades a week, edge gone at $0.04/share slippage (summarised in worker/STRATEGY_PRESETS.md)",
+   "url": "",
+   "kind": "internal_backtest"
+  },
+  "D05": {
+   "title": "Derek, 2026-11-26 (t59u): 'Ask ChatGPT about the Ross Cameron method it studied for the strategy and move what you find into code.' Ross Cameron's public rules as summarised in the ChatGPT chat 'Day Trading Strategies Comparison'.",
+   "url": "",
+   "kind": "derek"
+  }
+ },
+ "rules": [
+  {
+   "id": "DR-01",
+   "origin": "derek",
+   "market": "all",
+   "category": "safety",
+   "title": "Paper trading only",
+   "rule": "Never trade real money or enable a live mode. Stocks and crypto use the Alpaca paper host; forex uses the OANDA practice host only.",
+   "sources": [
+    "D02"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/config.py:Config.__post_init__",
+    "worker/momentum/risk.py:RiskConfig.__post_init__",
+    "worker/momentum/oanda.py:non_practice_host_refused"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "DR-02",
+   "origin": "derek",
+   "market": "all",
+   "category": "ai",
+   "title": "AI trades use the same risk checks",
+   "rule": "An AI-chosen trade becomes a normal deterministic order intent and must pass the unchanged risk manager. AI cannot skip or loosen a limit.",
+   "sources": [
+    "D03"
+   ],
+   "status": "enforced",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ai_cotrade.py:build_ai_intent",
+    "worker/momentum/session.py:entry_candidates"
+   ],
+   "prompt": true,
+   "note": "Only active when AI_ADVISOR_MODE=cotrade. Today the worker runs advise (watch-only)."
+  },
+  {
+   "id": "DR-03",
+   "origin": "derek",
+   "market": "all",
+   "category": "ai",
+   "title": "Outside text cannot change limits",
+   "rule": "Web pages, news or model output cannot change active strategies, credentials or risk limits, and no strategy is called proven without evidence.",
+   "sources": [
+    "D04"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskManager._assess"
+   ],
+   "prompt": true,
+   "note": "Limits live in code and reviewed config; this handbook is read-only text."
+  },
+  {
+   "id": "DR-04",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Long only",
+   "rule": "Buy-side entries only. No shorting.",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:only_long_entries_supported"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "DR-05",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "session",
+   "title": "Day trades only, flat by the close",
+   "rule": "Open and close every position the same New York session; flatten from 10 minutes before the close (earlier on early-close days).",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/day_trade_core.py:SessionClock.must_flatten",
+    "worker/momentum/large_cap_day_trade_v1.py:session_flatten",
+    "worker/momentum/large_cap_day_trade_v1.py:prior_day_liquidation"
+   ],
+   "prompt": true,
+   "note": "Off-by-default profile large_cap_day_trade_v1 flattens from 15:50 ET, or close-10 min on early-close days (13:00 close -> 12:50), and liquidates prior-day positions after the open. Main's default still exits at 15:45 ET and is not early-close aware."
+  },
+  {
+   "id": "DR-06",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "session",
+   "title": "Regular-session entries, extended_hours off",
+   "rule": "Enter only in the regular session and send entries with extended_hours=false.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:extended_hours",
+    "worker/momentum/day_trade_core.py:SessionClock.in_regular_session"
+   ],
+   "prompt": true,
+   "note": "The profile ignores extended-hours bars and its intents carry extended_hours=false. Main's default alpaca.py still sends extended_hours=true; the profile's hash block records entry_extended_hours=false and the wiring PR must honour it."
+  },
+  {
+   "id": "DR-07",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "session",
+   "title": "Nothing before 09:45 ET",
+   "rule": "No new setups before 09:45 ET (15-minute opening range must finish first).",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:orb_window",
+    "worker/momentum/large_cap_day_trade_v1.py:vwap_window"
+   ],
+   "prompt": true,
+   "note": "In the profile nothing arms before 09:45 ET. Main's default allows entries from 09:35 ET."
+  },
+  {
+   "id": "DR-08",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "session",
+   "title": "Arming windows",
+   "rule": "ORB 09:45-09:50; ORB or VWAP 09:50-10:45; VWAP 10:45-11:30; nothing 11:30-13:30; VWAP 13:30-15:00; no new setups after 15:00 ET.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:orb_window",
+    "worker/momentum/large_cap_day_trade_v1.py:vwap_window",
+    "worker/momentum/day_trade_core.py:SessionClock.entries_allowed"
+   ],
+   "prompt": true,
+   "note": "Profile only. Also no new buys after 15:30 ET (close-30 min on early-close days)."
+  },
+  {
+   "id": "DR-09",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Two setups only",
+   "rule": "Trade only a 15-minute opening-range-breakout retest and a trend-aligned VWAP pullback. Consolidation breakouts are logged, not traded. No mean reversion or scalping.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:step_orb",
+    "worker/momentum/large_cap_day_trade_v1.py:step_vwap"
+   ],
+   "prompt": true,
+   "note": "Profile only (ORB has priority if both fire). Main's default still trades the liquid_large_cap_iex_v2 first-pullback breakout."
+  },
+  {
+   "id": "DR-10",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Trade only an UP regime",
+   "rule": "Only an UP regime (efficiency, VWAP slope and closes above VWAP) arms new setups. AAPL and MSFT also need SPY above its VWAP with a non-decreasing 5-minute VWAP.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:regime_at",
+    "worker/momentum/large_cap_day_trade_v1.py:spy_aligned"
+   ],
+   "prompt": true,
+   "note": "Profile only. DOWN cancels a setup; CHOP does not."
+  },
+  {
+   "id": "DR-11",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "Max $25 risk per trade",
+   "rule": "Hard max planned risk of $25 per trade (also 0.025% of a reference equity capped at $100k).",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.per_trade_risk",
+    "worker/momentum/large_cap_day_trade_v1.py:effective_caps"
+   ],
+   "prompt": true,
+   "note": "The $25 cap is enforced. The off-by-default large-cap profile also applies 0.025% of E_ref = min(session equity, $100k), never above RiskConfig."
+  },
+  {
+   "id": "DR-12",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "Stop for the day at -$75",
+   "rule": "Halt new entries for the day once the day's net loss reaches $75.",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.max_daily_loss",
+    "worker/momentum/risk.py:RiskManager._assess"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "DR-13",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "Position size caps",
+   "rule": "Max $2,500 per symbol, $5,000 gross, $50 committed open risk including pending entries, max 2 positions.",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced_stricter",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.max_notional",
+    "worker/momentum/risk.py:existing_exposure",
+    "worker/momentum/large_cap_day_trade_v1.py:effective_caps"
+   ],
+   "prompt": true,
+   "note": "Main caps each position at $1,000 and allows only one open equity position or open order at a time, so gross, open risk and count are all tighter. The large-cap profile takes the stricter of its spec and RiskConfig, so it inherits $1,000 and one position."
+  },
+  {
+   "id": "DR-14",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "Whole shares, no margin",
+   "rule": "Whole shares only; never use margin.",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/alpaca.py:whole-share",
+    "worker/momentum/risk.py:RiskManager._assess"
+   ],
+   "prompt": true,
+   "note": "Notional is capped at min(max_notional, equity), so no leverage is used."
+  },
+  {
+   "id": "DR-15",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "Size from stop distance plus costs",
+   "rule": "Shares = floor(min(trade risk left / d, portfolio risk left / d, symbol allowance left / P, exposure left / P)) with d = P - S + c and c = max($0.02, 0.0002 x P). Skip if under 1 share.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/day_trade_core.py:size_shares",
+    "worker/momentum/day_trade_core.py:cost_allowance"
+   ],
+   "prompt": false,
+   "note": "The profile sizes with c = max($0.02, 0.0002 x P) and never below RiskConfig's allowance. Main's default RiskManager still uses a fixed $0.02."
+  },
+  {
+   "id": "DR-16",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "ATR-based entries and stops",
+   "rule": "1-minute bars, 14-bar ATR, 15-bar warmup. Entry limit = signal close + 0.20 ATR with a 60-second time-to-live. Stop distance must be 0.75-2.5 ATR.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:entry_offset_atr",
+    "worker/momentum/large_cap_day_trade_v1.py:stop_distance_outside_atr_band",
+    "worker/momentum/large_cap_day_trade_v1.py:limit_ttl_expired"
+   ],
+   "prompt": true,
+   "note": "Profile only. Main's default enters at the ask (max $0.03 chase), TTL 15 s, stop at pullback low - $0.01."
+  },
+  {
+   "id": "DR-17",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "exit",
+   "title": "Target 2R",
+   "rule": "Profit target at +2R.",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/strategy.py:StrategyConfig.target_r",
+    "worker/momentum/risk.py:insufficient_reward_room"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "DR-18",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "exit",
+   "title": "No-progress and max-hold exits",
+   "rule": "Exit at 10 minutes if the trade is below +0.5R. Max hold 45 minutes.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:no_progress_10m",
+    "worker/momentum/large_cap_day_trade_v1.py:max_hold_45m"
+   ],
+   "prompt": true,
+   "note": "Profile only. Main's default exits every trade at 10 minutes."
+  },
+  {
+   "id": "DR-19",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Relative volume is logged, not a gate",
+   "rule": "Record RVOL but do not require it. Prior-close % gain is context only. No float, price-band or catalyst gates for large caps.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:rvol_log_only"
+   ],
+   "prompt": false,
+   "note": "Profile only (RVOL logged, no float/price/catalyst gate). Main's default liquid v2 requires RVOL >= 1.2 and gain >= 0.10%."
+  },
+  {
+   "id": "DR-20",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "discipline",
+   "title": "Cooldowns after a trade",
+   "rule": "Wait 10 minutes after a win or breakeven and 15 minutes after a loss before the same symbol re-arms.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:cooldown_after_loss_seconds",
+    "worker/momentum/day_trade_core.py:DayCounters.in_cooldown"
+   ],
+   "prompt": true,
+   "note": "Profile only. Counters persist across restarts via to_state()."
+  },
+  {
+   "id": "DR-21",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "discipline",
+   "title": "Campaign caps",
+   "rule": "At most 3 campaigns per symbol per day, disable a symbol after 2 losing campaigns, at most 6 campaigns per day bot-wide.",
+   "sources": [
+    "D01"
+   ],
+   "status": "in_profile_off",
+   "default": "off",
+   "enforced_in": [
+    "worker/momentum/large_cap_day_trade_v1.py:symbol_campaign_cap",
+    "worker/momentum/large_cap_day_trade_v1.py:daily_campaign_cap",
+    "worker/momentum/large_cap_day_trade_v1.py:symbol_disabled_after_losses"
+   ],
+   "prompt": true,
+   "note": "Profile only. Also max 1 filled ORB per symbol per day."
+  },
+  {
+   "id": "DR-22",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "No partials or scale-ins by default",
+   "rule": "Partial exits and adding to positions stay off unless explicitly turned on. Never average down.",
+   "sources": [
+    "D01"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:existing_exposure"
+   ],
+   "prompt": true,
+   "note": "Main cannot add to a position at all: any open position or order blocks new entries."
+  },
+  {
+   "id": "DR-23",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Ross: five-factor stock filter",
+   "rule": "Only trade stocks priced $2-$20 with float under 20M shares, relative volume >= 5x, up >= 10% today and a fresh news catalyst. Top-5 gainers preferred (logged).",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:five_factor_gate"
+   ],
+   "prompt": false,
+   "note": "ross_cameron_small_cap_v1 only, which is hard-gated off until float, news and full-market scanner data exist. Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-24",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Ross: Gap and Go",
+   "rule": "09:30-10:00 ET on a > 4% gap with a catalyst: buy the break of the premarket high, or a 1-minute opening-range breakout with the stop at the first candle's low.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:detect_gap_and_go"
+   ],
+   "prompt": false,
+   "note": "Completed 1-minute bars only (Ross enters intrabar). Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-25",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "strategy",
+   "title": "Ross: bull flag",
+   "rule": "After a strong green impulse, 2-3 red pullback candles (4+ rejected), retrace <= 50%, pullback holds VWAP: buy the break of the last red candle's high, stop at the pullback low, about 2:1. A 9-EMA break is a warning.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:detect_bull_flag"
+   ],
+   "prompt": false,
+   "note": "Window 09:30-11:30 ET. Wide stops over $0.20/share are skipped (Ross example). Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-26",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "exit",
+   "title": "Ross: half off at the first target",
+   "rule": "Sell half at the first target (+2R), then move the stop on the rest to the entry price.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:first_target_half",
+    "worker/momentum/ross_cameron_small_cap_v1.py:move_stop_to_entry_after_partial"
+   ],
+   "prompt": false,
+   "note": "Unlike the large-cap profile, partials are part of this method. Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-27",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "exit",
+   "title": "Ross: first red candle exit",
+   "rule": "Exit when a 1-minute candle closes red.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:first_red_candle"
+   ],
+   "prompt": false,
+   "note": "ross_cameron_small_cap_v1 only (hard-gated). Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-28",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "discipline",
+   "title": "Ross: stop after 3 losses in a row",
+   "rule": "Stop trading for the day after three consecutive losing trades, and at the daily max loss.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:three_consecutive_losses"
+   ],
+   "prompt": false,
+   "note": "Daily max loss is the stricter of Ross's setting and RiskConfig ($75). Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-29",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "data",
+   "title": "Ross: needs paid-grade data",
+   "rule": "The method needs share float, news catalysts and a full-market gainers scan on a SIP feed. Without all of them the profile refuses to trade.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:provider_blockers"
+   ],
+   "prompt": false,
+   "note": "No provider implementation ships. Data costs need Derek's yes. Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "DR-30",
+   "origin": "derek",
+   "market": "stocks",
+   "category": "risk",
+   "title": "Ross: our caps win",
+   "rule": "Ross's own sizing is clamped by our global limits: $25 risk per trade, $75 a day, $1,000 notional, one open stock position.",
+   "sources": [
+    "D05"
+   ],
+   "status": "in_profile_off",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/ross_cameron_small_cap_v1.py:ross_caps"
+   ],
+   "prompt": false,
+   "note": "ross_cameron_small_cap_v1 only (hard-gated). Left out of the AI prompt while the profile is gated."
+  },
+  {
+   "id": "RG-01",
+   "origin": "research",
+   "market": "all",
+   "category": "evidence",
+   "title": "Expect most day trading to lose",
+   "rule": "Treat results as learning. Large studies find about 97% of persistent day traders lost money and under 1% earned reliable profits after fees.",
+   "sources": [
+    "S06",
+    "S07",
+    "S05"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  },
+  {
+   "id": "RG-02",
+   "origin": "research",
+   "market": "all",
+   "category": "risk",
+   "title": "Stop first, then size",
+   "rule": "Define the stop before entry and size from the distance to it so a stop-out loses a fixed small amount (1R).",
+   "sources": [
+    "S10"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:invalid_stop_or_target",
+    "worker/momentum/forex_risk.py:ForexRiskConfig.require_stop_loss"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "RG-03",
+   "origin": "research",
+   "market": "all",
+   "category": "risk",
+   "title": "Small risk per trade",
+   "rule": "Risk at most about 1% of equity per trade; smaller is safer while a strategy is unproven.",
+   "sources": [
+    "S10"
+   ],
+   "status": "enforced_stricter",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.per_trade_risk"
+   ],
+   "prompt": true,
+   "note": "Stocks $25 per trade on a ~$100k paper account (0.025%)."
+  },
+  {
+   "id": "RG-04",
+   "origin": "research",
+   "market": "all",
+   "category": "risk",
+   "title": "Daily loss stop on every market",
+   "rule": "A daily loss limit halts new entries until the next session.",
+   "sources": [
+    "S05"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.max_daily_loss",
+    "worker/momentum/paper_risk.py:RiskLimits.max_daily_loss",
+    "worker/momentum/forex_risk.py:ForexRiskConfig.max_daily_loss_usd"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "RG-05",
+   "origin": "research",
+   "market": "all",
+   "category": "costs",
+   "title": "Count every cost",
+   "rule": "Include spread, slippage and fees. Reject an edge that disappears at double the assumed cost.",
+   "sources": [
+    "S16",
+    "S13",
+    "L01"
+   ],
+   "status": "partial",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.execution_allowance_per_share"
+   ],
+   "prompt": true,
+   "note": "Sizing includes a per-share cost allowance; the 2x-cost acceptance test is a Strategy Lab gate, not runtime code."
+  },
+  {
+   "id": "RG-06",
+   "origin": "research",
+   "market": "all",
+   "category": "evidence",
+   "title": "Distrust a single good backtest",
+   "rule": "Test out of sample, count how many variants were tried, and demand stronger evidence (t-stat above 3) when many were tried.",
+   "sources": [
+    "S17",
+    "S18"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  },
+  {
+   "id": "RG-07",
+   "origin": "research",
+   "market": "all",
+   "category": "execution",
+   "title": "No trade on stale or wide quotes",
+   "rule": "Skip a signal when the quote is old or the spread is wide.",
+   "sources": [
+    "S24",
+    "S14"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/risk.py:RiskConfig.max_quote_age_seconds",
+    "worker/momentum/risk.py:spread_too_wide"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "RG-08",
+   "origin": "research",
+   "market": "all",
+   "category": "discipline",
+   "title": "Do not hold losers or average down",
+   "rule": "Investors tend to sell winners and keep losers (disposition effect). Let the stop act; never add to a loser.",
+   "sources": [
+    "S09"
+   ],
+   "status": "enforced",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/strategy.py:stop_reached",
+    "worker/momentum/risk.py:existing_exposure"
+   ],
+   "prompt": true
+  },
+  {
+   "id": "RG-09",
+   "origin": "research",
+   "market": "all",
+   "category": "discipline",
+   "title": "Trade less",
+   "rule": "Heavy trading lowers net returns for individuals. Cap trades per day.",
+   "sources": [
+    "S08"
+   ],
+   "status": "partial",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/ai_advisor.py:max_trades_per_day"
+   ],
+   "prompt": true,
+   "note": "Only AI-only cotrade entries have a daily cap; see DR-21."
+  },
+  {
+   "id": "RG-10",
+   "origin": "research",
+   "market": "stocks",
+   "category": "regulation",
+   "title": "PDT rule is gone",
+   "rule": "FINRA replaced the pattern day trader rule and its $25,000 minimum with intraday margin standards on 2026-06-04 (phase-in to 2027-10-20). Alpaca removed PDT checks. Paper accounts were never subject to it.",
+   "sources": [
+    "S01",
+    "S02",
+    "S03",
+    "S04"
+   ],
+   "status": "informational",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  },
+  {
+   "id": "RG-11",
+   "origin": "research",
+   "market": "forex",
+   "category": "risk",
+   "title": "Low effective leverage",
+   "rule": "US retail forex allows up to 50:1 on majors; most retail leveraged accounts lose. Keep effective leverage near 2x and always use a stop.",
+   "sources": [
+    "S20",
+    "S21"
+   ],
+   "status": "enforced",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/forex_risk.py:ForexRiskConfig.max_effective_leverage"
+   ],
+   "prompt": true,
+   "note": "OANDA practice orders are off until Derek's token and account ID are on Render."
+  },
+  {
+   "id": "RG-12",
+   "origin": "research",
+   "market": "forex",
+   "category": "session",
+   "title": "Respect forex sessions and rollover",
+   "rule": "Liquidity is best in the London-New York overlap (about 08:00-12:00 ET). Avoid the 16:59-17:05 ET rollover, Sunday open and big news when spreads widen.",
+   "sources": [
+    "S22",
+    "S23",
+    "S24"
+   ],
+   "status": "partial",
+   "default": "gated",
+   "enforced_in": [
+    "worker/momentum/forex_risk.py:ForexRiskConfig.max_spread_bps"
+   ],
+   "prompt": true,
+   "note": "The 15 bps spread cap blocks most wide-spread moments; there is no session-time filter."
+  },
+  {
+   "id": "RG-13",
+   "origin": "research",
+   "market": "crypto",
+   "category": "costs",
+   "title": "Crypto fees are large for short trades",
+   "rule": "Alpaca charges 0.15-0.25% per side at the lowest tier, so a round trip can cost up to about 0.5% before spread. A target smaller than that loses money.",
+   "sources": [
+    "S25"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true,
+   "note": "The live crypto rule enters after a +0.5% rise and stops at -1%; it has no explicit take-profit check against fees."
+  },
+  {
+   "id": "RG-14",
+   "origin": "research",
+   "market": "crypto",
+   "category": "evidence",
+   "title": "Crypto momentum evidence is weekly, not tick",
+   "rule": "Published crypto momentum is at daily-to-weekly horizons. Do not assume it holds over seconds.",
+   "sources": [
+    "S26"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  },
+  {
+   "id": "RG-15",
+   "origin": "research",
+   "market": "all",
+   "category": "journal",
+   "title": "Journal every decision",
+   "rule": "Record every entry, exit and rejection with its reason, then review by R-multiple, setup and time of day.",
+   "sources": [
+    "S06"
+   ],
+   "status": "partial",
+   "default": "on",
+   "enforced_in": [
+    "worker/momentum/journal.py:Journal"
+   ],
+   "prompt": false,
+   "note": "The journal records decisions; there is no automatic weekly R-multiple review yet."
+  },
+  {
+   "id": "RG-16",
+   "origin": "research",
+   "market": "stocks",
+   "category": "evidence",
+   "title": "Intraday momentum evidence is mixed",
+   "rule": "SPY's first half-hour return predicted its last half-hour in 1993-2013, and a 2024 SPY intraday-momentum paper reports gains, but an independent 2015-2026 replication found no US effect after costs. Treat it as unproven.",
+   "sources": [
+    "S12",
+    "S11",
+    "S13"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  },
+  {
+   "id": "RG-17",
+   "origin": "research",
+   "market": "stocks",
+   "category": "indicators",
+   "title": "VWAP is a reference, not a signal",
+   "rule": "VWAP began as a benchmark for execution cost. Use it to judge trend and fair price, alongside price action and risk limits, not as a buy signal on its own.",
+   "sources": [
+    "S19"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  },
+  {
+   "id": "RG-18",
+   "origin": "research",
+   "market": "stocks",
+   "category": "evidence",
+   "title": "Gap-and-go is unvalidated",
+   "rule": "Momentum profits tend to accrue overnight, not intraday. No peer-reviewed evidence was found that retail gap-and-go entries are profitable after costs.",
+   "sources": [
+    "S15"
+   ],
+   "status": "guidance",
+   "default": "n/a",
+   "enforced_in": [],
+   "prompt": true
+  }
+ ]
+}
