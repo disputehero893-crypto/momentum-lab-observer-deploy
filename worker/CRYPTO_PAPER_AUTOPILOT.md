@@ -19,11 +19,9 @@ Orders go only to `https://paper-api.alpaca.markets/v2/orders`. The live host is
 
 ## Where it runs
 
-The observer calls this once per cycle, after it has already collected the crypto watch. Stock orders stay off (`execute=False`). The crypto step is skipped entirely when the flag is false, and a crypto failure does not fail the stock cycle.
+The observer calls this once per cycle, after it has already collected the crypto watch. `serve-observe` keeps stock orders off (`execute=False`). `serve-paper` is that same cycle and may submit stock orders when the equity gates are open. The crypto step is skipped entirely when the flag is false, and a crypto failure does not fail the stock cycle. Both paths use the same journal kill switch and `paper_blockers()`.
 
-`python -m momentum.crypto_paper_loop` runs the same cycle on a timer. Use one process, not both, against one paper account.
-
-After the equity `serve-paper` release lands, that process can call `CryptoPaperLoop.cycle(watch)` with the watch it already has. This change does not edit `serve-paper`, `paper_runtime.py`, or `alpaca.py`.
+`python -m momentum.crypto_paper_loop` runs the same cycle on a timer. Do not start it beside `serve-paper` or `serve-observe`. One process, one journal, one loop.
 
 ## How the reviewed hash is produced
 

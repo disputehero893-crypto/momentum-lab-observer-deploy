@@ -1,0 +1,81 @@
+# Paper command for the EXISTING worker. Do not apply this file as a second
+# service, and do not create a second disk or journal. Service and Blueprint
+# automatic updates stay off. Nothing in this repo deploys it.
+#
+# On the current Render worker, change the start command from serve-observe
+# to serve-paper. Keep the same disk at /var/data and the same JOURNAL_PATH.
+# Do not also run python -m momentum.crypto_paper_loop.
+#
+# Activation checklist, all required before any stock order can be submitted:
+# 1. One service only. Change that service's command to serve-paper.
+# 2. MOMENTUM_MODE=paper. There is no live mode.
+# 3. Do not set APCA_API_BASE_URL, ALPACA_API_BASE_URL, or ALPACA_BASE_URL.
+#    Trading calls are locked to https://paper-api.alpaca.markets.
+# 4. Provision paper API credentials in the host, not in this file.
+# 5. Confirm the account read is an ACTIVE, unblocked paper account.
+# 6. Confirm the journal kill switch / halt is not latched.
+# 7. Set PAPER_REVIEWED_CONFIG_HASH to the exact review hash of the strategy,
+#    risk limits, watchlist, and paper host. A mismatch stays observation-only.
+# 8. Only then set PAPER_TRADING_ENABLED=true. The default below is false.
+# 9. /health must show paper_execution_active, execution_reason,
+#    live_execution_supported false, live_execution_locked true, and
+#    orders_submitted. Live trading cannot be turned on.
+services:
+  - type: web
+    name: momentum-lab-paper
+    runtime: docker
+    plan: 0.5c-512mb
+    dockerfilePath: ./worker/Dockerfile
+    dockerContext: ./worker
+    # Render replaces CMD; the Dockerfile's privilege-dropping ENTRYPOINT remains.
+    dockerCommand: serve-paper
+    numInstances: 1
+    autoDeployTrigger: "off"
+    healthCheckPath: /health
+    disk:
+      name: momentum-paper-journal
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: MOMENTUM_MODE
+        value: paper
+      - key: PAPER_TRADING_ENABLED
+        value: "false"
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: JOURNAL_PATH
+        value: /var/data/momentum.sqlite3
+      - key: EXPORT_DIR
+        value: /var/data/exports
+      - key: POLL_SECONDS
+        value: "5"
+      - key: WORKER_CONTROL_TOKEN
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: https://id-preview--31bc21f0-6b6a-43e5-8d84-96ea1d806889.lovable.app
+      - key: SUPABASE_URL
+        value: https://wusnuhzjslikzswkahle.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OWNER_USER_ID
+        sync: false
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      - key: ALPACA_DATA_FEED
+        value: iex
+      - key: WATCHLIST
+        value: AAPL,MSFT,SPY
+      - key: ACCOUNTING_HISTORY_START
+        value: ""
+      - key: ACCOUNTING_COST_POLICY
+        value: actual
+      - key: PAPER_REVIEWED_CONFIG_HASH
+        sync: false
+      - key: JOURNAL_SAMPLE_SECONDS
+        value: "60"
+      - key: JOURNAL_MIN_FREE_MB
+        value: "64"

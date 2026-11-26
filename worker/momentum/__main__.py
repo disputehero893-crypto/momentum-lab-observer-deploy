@@ -15,7 +15,16 @@ from .lease import WorkerLease
 from .server import Application, make_server
 
 
-def _serve_configuration_degraded():
+def _configuration_reason(exc):
+    text = str(exc)
+    if "paper API host" in text or "another execution environment" in text:
+        return "live_broker_url_refused"
+    if "live execution is not implemented" in text:
+        return "mode_not_paper"
+    return "configuration_invalid"
+
+
+def _serve_configuration_degraded(reason="configuration_invalid"):
     """Stay listening when configuration is invalid so a bad env cannot crash-loop."""
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from urllib.parse import urlsplit
@@ -26,8 +35,10 @@ def _serve_configuration_degraded():
         port = 10000
     body = canonical_json({
         "status": "degraded", "service": "momentum-lab", "execution_disabled": True,
-        "paper_trading_enabled": False, "paper_execution_running": False,
-        "live_execution_supported": False, "orders_submitted": 0,
+        "execution_locked": True, "paper_trading_enabled": False,
+        "paper_execution_running": False, "paper_execution_active": False,
+        "execution_reason": reason, "live_execution_supported": False,
+        "live_execution_locked": True, "orders_submitted": 0,
         "journal_status": "unopened", "startup_error": "configuration_invalid",
         "quarantined_payloads": None,
     }).encode()
@@ -84,6 +95,9 @@ def main(argv=None):
     observe = sub.add_parser("observe", help="Run GET-only paper observations; never submits or cancels orders")
     observe.add_argument("--once", action="store_true", help="Observe one bounded cycle, then stop")
     sub.add_parser("serve-observe", help="Run GET-only observations with the authenticated HTTP API")
+    paper = sub.add_parser("serve-paper",
+                           help="Run the separate paper-trading release; live execution stays locked")
+    paper.add_argument("--once", action="store_true", help="Run one gated cycle, then stop")
     autopilot = sub.add_parser("serve-autopilot", help="Run account-bound paper executor; starts paused until explicit activation")
     autopilot.add_argument("--account-id", default=os.environ.get("AUTOPILOT_ACCOUNT_ID", ""),
                            help="Verified paper broker account UUID, never an API key")
@@ -102,6 +116,8 @@ def main(argv=None):
     except ConfigError as exc:
         if args.command == "serve-observe":
             return _serve_configuration_degraded()
+        if args.command == "serve-paper":
+            return _serve_configuration_degraded(_configuration_reason(exc))
         print(f"Worker stopped: {exc}", file=sys.stderr)
         return 2
     try:
@@ -184,6 +200,7 @@ def main(argv=None):
             thread.start()
             print(f"Momentum Lab listening on {config.host}:{server.server_port}; execution disabled", flush=True)
             stop = threading.Event()
+            bridge = None
 
             def _degraded(code):
                 app.startup_error = code
@@ -222,6 +239,66 @@ def main(argv=None):
                             _degraded(code)
             finally:
                 stop.set()
+                if bridge is not None:
+                    bridge.join(timeout=2)
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+        elif args.command == "serve-paper":
+            # Same process and journal as serve-observe, plus stock orders when
+            # every paper gate is open. The observation cycle already runs the
+            # crypto hook, resume_entries, and the OANDA watch. Do not also
+            # start momentum.crypto_paper_loop.
+            import sqlite3
+            from .observation import ObservationError, ObservationWorker
+            app = Application(config, defer_journal=True)
+            server = make_server(config, app)
+            thread = threading.Thread(target=server.serve_forever, name="paper-api", daemon=True)
+            thread.start()
+            print(f"Momentum Lab listening on {config.host}:{server.server_port}; live execution locked", flush=True)
+            stop = threading.Event()
+            bridge = None
+
+            def _degraded(code):
+                app.startup_error = code
+                print("Paper runtime degraded: " + code + "; live execution locked", flush=True)
+                stop.wait()
+
+            try:
+                with shutdown_signals(stop):
+                    app.open_journal()
+                    if app.journal_status != "writable":
+                        _degraded(app.startup_error or "journal_not_writable")
+                    else:
+                        try:
+                            with ObservationWorker(config, journal=app.journal, stock_execution=True) as worker:
+                                app.observation_worker = worker
+                                app.paper_worker = worker
+                                bridge = threading.Thread(
+                                    target=lambda: (stop.wait(), worker.stop_event.set()),
+                                    name="paper-stop", daemon=True)
+                                bridge.start()
+                                from .resume import config_report, control_report
+                                latch = control_report(app.journal)
+                                print("Paper trading runtime started; orders submit only when every paper gate is open", flush=True)
+                                print("Kill switch " + ("latched" if latch["enabled"] else "clear")
+                                      + "; reason=" + str(latch["reason"])
+                                      + "; flatten_requested=" + str(latch["flatten_requested"]).lower()
+                                      + "; paper config hash " + config_report(config)["hash_status"], flush=True)
+                                worker.run(max_cycles=1 if getattr(args, "once", False) else None)
+                        except (ObservationError, sqlite3.Error, OSError, Exception) as exc:
+                            text = str(exc)
+                            if "journal_volume_full" in text:
+                                code = "journal_volume_full_grow_the_disk_or_free_space"
+                            elif isinstance(exc, ObservationError) and text and len(text) <= 120 and " " not in text:
+                                code = text
+                            else:
+                                code = "paper_runtime_startup_failed"
+                            _degraded(code)
+            finally:
+                stop.set()
+                if bridge is not None:
+                    bridge.join(timeout=2)
                 server.shutdown()
                 server.server_close()
                 thread.join(timeout=2)

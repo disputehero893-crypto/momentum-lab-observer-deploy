@@ -195,11 +195,15 @@ class ActivityNormalizationTests(unittest.TestCase):
             normalize_activity(fee(activity_type="CSD", net_amount="-100"))
 
     def test_unknown_corporate_action_and_crypto_fees_are_visible_blockers(self):
-        for kind in ("JNLS", "SSP", "CFEE", "FUTURE_TYPE"):
+        for kind in ("JNLS", "SSP", "FUTURE_TYPE"):
             observation = normalize_activity(fee(activity_type=kind))
             self.assertEqual(observation.kind, "unsupported")
             self.assertIsNone(observation.record)
             self.assertIn("unsupported_account_activity", observation.blockers)
+        # A crypto fee not attributable to a reviewed pair is never segregated.
+        observation = normalize_activity(fee(activity_type="CFEE"))
+        self.assertEqual(observation.kind, "unsupported")
+        self.assertIn("unattributed_non_equity_fee", observation.blockers)
 
     def test_correction_and_bust_markers_never_apply_as_ordinary_fills(self):
         changes = [{"type": "trade_correct"}, {"type": "trade_bust"}, {"previous_id": "prior"},
@@ -212,7 +216,9 @@ class ActivityNormalizationTests(unittest.TestCase):
             self.assertIn("activity_correction_requires_review", observation.blockers)
 
     def test_unsupported_asset_side_currency_and_type_do_not_enter_ledger(self):
-        changes = [{"symbol": "BTC/USD"}, {"asset_class": "crypto"}, {"side": "sell_short"},
+        # Reviewed crypto pairs are segregated (test_activity_completeness); an
+        # unreviewed crypto asset still blocks.
+        changes = [{"symbol": "DOGE/USD"}, {"asset_class": "crypto"}, {"side": "sell_short"},
                    {"currency": "EUR"}, {"type": "replaced"}, {"type": []}, {"side": []}]
         for change in changes:
             observation = normalize_activity(fill(**change))

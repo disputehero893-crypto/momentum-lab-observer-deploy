@@ -34,7 +34,8 @@ def start_session(worker):
             strategy_version=str(strategy_version),
             watchlist=tuple(worker.config.watchlist),
             config_hash=worker.config.review_hash() if hasattr(worker.config, "review_hash") else None,
-            summary={"instance_id": worker.instance_id, "runtime": "observation_only"},
+            summary={"instance_id": worker.instance_id,
+                     "runtime": "serve_paper" if getattr(worker, "stock_execution", False) else "observation_only"},
         )
     except Exception as exc:
         LOG.warning("paper run start_run failed: %s", type(exc).__name__)

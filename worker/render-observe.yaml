@@ -19,6 +19,9 @@ services:
     envVars:
       - key: MOMENTUM_MODE
         value: paper
+      # Stays false while the command is serve-observe. Paper stock orders are
+      # the same service with the command changed to serve-paper. Do not add a
+      # second service or a second journal. See PAPER_RELEASE.md.
       - key: PAPER_TRADING_ENABLED
         value: "false"
       - key: HOST

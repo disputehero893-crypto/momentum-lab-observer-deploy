@@ -38,6 +38,11 @@ def _ai_cotrade(env):
             "confluence_min_confidence": ai.confluence_min_confidence,
             "max_trades_per_day": ai.max_trades_per_day, "signal_max_age_seconds": ai.signal_max_age_seconds}
 
+def _ai_paper_execute(env):
+    """Reviewed Gemini paper-execution settings, only when paper_execute is switched on."""
+    from .ai_paper_trader import reviewed_execute_settings
+    return reviewed_execute_settings(env)
+
 def flag(value, name):
     if value is None or value == "":
         return False
@@ -97,6 +102,9 @@ class Config:
     # Non-empty only when the optional AI advisor runs in cotrade mode; then it is
     # part of review_hash(), so AI-only paper entries need an explicit re-review.
     ai_cotrade: dict = field(default_factory=dict)
+    # AI_ADVISOR_MODE=paper_execute only (AI_PAPER_TRADING.md). Empty means the
+    # rule loop decides; absent from the hash until armed.
+    ai_paper_execute: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.mode not in {"demo", "paper"}:
@@ -235,6 +243,7 @@ class Config:
                 accounting_baseline_path=env.get("ACCOUNTING_BASELINE_PATH", ""),
                 accounting_cost_policy=env.get("ACCOUNTING_COST_POLICY", "actual"),
                 ai_cotrade=_ai_cotrade(env),
+                ai_paper_execute=_ai_paper_execute(env),
             )
         except (ValueError, ArithmeticError) as exc:
             if isinstance(exc, ConfigError):
@@ -296,6 +305,8 @@ class Config:
                     "execution_host": PAPER_API_HOST}
         if self.ai_cotrade:
             settings["ai_cotrade"] = dict(self.ai_cotrade)
+        if self.ai_paper_execute:
+            settings["ai_paper_execute"] = dict(self.ai_paper_execute)
         if self.oanda_practice_orders_enabled:
             from .forex_risk import ForexRiskConfig
             settings["oanda_practice_orders"] = {
@@ -348,6 +359,7 @@ class Config:
             "accounting_baseline_configured": bool(self.accounting_baseline_path),
             "accounting_cost_policy": self.accounting_cost_policy,
             "ai_cotrade_reviewed_settings": dict(self.ai_cotrade) or None,
+            "ai_paper_execute_reviewed_settings": dict(self.ai_paper_execute) or None,
             "paper_blockers": self.paper_blockers(), "live_execution_supported": False,
         }
 

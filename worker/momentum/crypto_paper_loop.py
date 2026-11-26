@@ -19,7 +19,7 @@ import time
 
 from .crypto_execution import CryptoPaperClient, CryptoPaperError, PAPER_HOST
 from .crypto_paper_strategy import decide_crypto, quote_from_row
-from .paper_risk import CRYPTO_PAPER_FEED, CRYPTO_PAPER_PAIRS, RiskLimits, RiskState
+from .paper_risk import CRYPTO_PAPER_FEED, CRYPTO_PAPER_PAIRS, RiskState, limits_for_risk
 from .risk import RiskConfig
 
 RUN_ID = "crypto-paper"
@@ -95,14 +95,7 @@ class CryptoPaperLoop:
         return RiskConfig(**overrides)
 
     def _limits(self, risk_cfg):
-        return RiskLimits(
-            max_order_notional=risk_cfg.max_notional,
-            max_total_exposure=min(Decimal("1000"), risk_cfg.max_notional),
-            max_daily_loss=risk_cfg.max_daily_loss,
-            max_open_positions=3,
-            max_feed_age_ms=int(risk_cfg.max_quote_age_seconds * 1000),
-            feed=CRYPTO_PAPER_FEED,
-        )
+        return limits_for_risk(risk_cfg, feed=CRYPTO_PAPER_FEED)
 
     def _exposure(self):
         total = Decimal("0")

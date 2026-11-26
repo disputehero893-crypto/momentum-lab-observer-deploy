@@ -1,8 +1,14 @@
-"""Single-owner observation scheduler. This runtime cannot submit or cancel orders.
+"""Single-owner observation scheduler.
 
-All broker I/O is GET-only. A saved dashboard link is not evidence here: the
-worker needs separately provisioned server credentials, verifies the actual
-account, and binds its durable journal to that account before importing data.
+The default runtime cannot submit or cancel orders: broker I/O is GET-only.
+``serve-paper`` constructs the same worker with ``stock_execution=True``. That
+is still one process and one journal. It keeps the crypto hook, the resume
+path, and the OANDA watch, and it may submit stock orders only when every
+paper gate holds. It does not start the standalone crypto timer.
+
+A saved dashboard link is not evidence here: the worker needs separately
+provisioned server credentials, verifies the actual account, and binds its
+durable journal to that account before importing data.
 """
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -47,12 +53,12 @@ def journal_observation_record(result):
     return {
         "schema_version": result.get("schema_version"),
         "mode": "paper",
-        "runtime": "observation_only",
+        "runtime": result.get("runtime") or "observation_only",
         "cycle_id": result.get("cycle_id"),
         "started_at": result.get("started_at"),
         "completed_at": result.get("completed_at"),
-        "execution_enabled": False,
-        "orders_submitted": 0,
+        "execution_enabled": bool(result.get("execution_enabled")),
+        "orders_submitted": int(result.get("orders_submitted") or 0),
         "error_code": result.get("error_code"),
         "halted": result.get("halted"),
         "blockers": result.get("blockers"),
@@ -86,6 +92,40 @@ class ReadOnlyPaperClient(PaperClient):
 
     def cancel(self, *args, **kwargs):
         raise PaperDisabled("Order cancellation is unavailable in observation mode")
+
+    def replace(self, *args, **kwargs):
+        raise PaperDisabled("Order replacement is unavailable in observation mode")
+
+
+class StockPaperClient(PaperClient):
+    """Paper reads without ``PAPER_TRADING_ENABLED``. Mutations stay locked.
+
+    ``serve-paper`` uses this so the observation cycle still runs when the
+    trading flag is off. Submit, cancel, and replace re-check the paper lock
+    and refuse every host other than ``https://paper-api.alpaca.markets``.
+    """
+
+    def __init__(self, config, *, transport=None, clock=None, stop_event=None):
+        super().__init__(config, transport=transport, clock=clock)
+        self.stop_event = stop_event or threading.Event()
+
+    def _enabled(self):
+        if self.config.mode != "paper" or not self.config.api_key or not self.config.api_secret:
+            raise PaperDisabled("Paper runtime requires paper mode and server credentials")
+        if self.stop_event.is_set():
+            raise PaperDisabled("Paper runtime is stopping")
+
+    def _request(self, method, path, **kwargs):
+        if method != "GET":
+            if self.config.mode != "paper" or not self.config.paper_enabled:
+                raise PaperDisabled("paper_trading_not_enabled")
+            blockers = list(self.config.paper_blockers())
+            if blockers:
+                raise PaperDisabled("Paper execution is blocked: " + ", ".join(blockers))
+            from .alpaca import assert_paper_broker_url
+            from .config import PAPER_API_HOST
+            assert_paper_broker_url(PAPER_API_HOST)
+        return super()._request(method, path, **kwargs)
 
 
 class _ReadOnlyProvider:
@@ -161,15 +201,36 @@ def _baseline(path, *, account_id, window_start):
 class ObservationWorker:
     def __init__(self, config, *, provider=None, journal=None, snapshot_builder=None,
                  publisher=None, activity_fetcher=None, clock=None, instance_id=None,
-                 price_history_collector=None, crypto_collector=None, forex_collector=None):
+                 price_history_collector=None, crypto_collector=None, forex_collector=None,
+                 stock_execution=False, session_ledger_factory=None):
         if config.mode != "paper":
             raise ObservationError("observation_requires_explicit_paper_mode")
         self.config = config
+        self.stock_execution = stock_execution is True
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.instance_id = str(uuid.UUID(instance_id)) if instance_id else str(uuid.uuid4())
         self.stop_event = threading.Event()
-        raw = provider or ReadOnlyPaperClient(config, clock=self.clock, stop_event=self.stop_event)
-        self.provider = _ReadOnlyProvider(raw, self.stop_event)
+        self._session_ledger_factory = session_ledger_factory
+        self.paper_execution_active = False
+        self.execution_reason = ("awaiting_first_cycle" if self.stock_execution
+                                 else "observation_runtime_cannot_execute_orders")
+        self.orders_submitted = 0
+        self.broker_url = None
+        self.broker_url_error = None
+        if self.stock_execution:
+            from .alpaca import assert_paper_broker_url
+            from .config import PAPER_API_HOST
+            try:
+                self.broker_url = assert_paper_broker_url(PAPER_API_HOST)
+            except PaperDisabled as exc:
+                self.broker_url_error = str(exc)
+            # Same paper client the stock session submits through. serve-observe
+            # keeps the read-only wrapper below and cannot be armed by config.
+            raw = provider or StockPaperClient(config, clock=self.clock, stop_event=self.stop_event)
+            self.provider = raw
+        else:
+            raw = provider or ReadOnlyPaperClient(config, clock=self.clock, stop_event=self.stop_event)
+            self.provider = _ReadOnlyProvider(raw, self.stop_event)
         self.journal = journal or Journal(config.db_path, sample_seconds=config.journal_sample_seconds,
                                           min_free_bytes=config.journal_min_free_mb * 1024 * 1024)
         self._injected_builder = snapshot_builder
@@ -186,7 +247,8 @@ class ObservationWorker:
             OandaPracticeClient(config), pairs=config.forex_watchlist, clock=self.clock)
             if config.forex_watchlist else None)
         self.session = PaperSession(config, self.provider, journal=self.journal,
-                                    snapshot_builder=self.builder, clock=self.clock)
+                                    snapshot_builder=self.builder, clock=self.clock,
+                                    execution_guard=(lambda: not self.stop_event.is_set()) if self.stock_execution else None)
         cloud = (config.supabase_url, config.supabase_service_role_key, config.owner_user_id)
         self.publisher = publisher if publisher is not None else (Publisher(config, clock=self.clock) if all(cloud) else None)
         if any(cloud) and not all(cloud):
@@ -359,9 +421,14 @@ class ObservationWorker:
         try:
             from .crypto_paper_loop import CryptoPaperLoop
             if getattr(self, "_crypto_paper_loop", None) is None:
-                self._crypto_paper_loop = CryptoPaperLoop(
-                    self.config, journal=self.journal, clock=self.clock,
-                    transport=getattr(self, "crypto_order_transport", None))
+                # AI_ADVISOR_MODE=paper_execute (reviewed in the hash) swaps in
+                # the Gemini-driven loop; it submits through the same client.
+                from .ai_paper_trader import build_ai_crypto_loop
+                transport = getattr(self, "crypto_order_transport", None)
+                self._crypto_paper_loop = build_ai_crypto_loop(
+                    self.config, journal=self.journal, clock=self.clock, transport=transport,
+                ) or CryptoPaperLoop(
+                    self.config, journal=self.journal, clock=self.clock, transport=transport)
             return self._crypto_paper_loop.cycle(watch)
         except Exception:
             return {"enabled": True, "orders_submitted": 0,
@@ -384,14 +451,16 @@ class ObservationWorker:
         try:
             started = self.clock()
             cycle_id = uuid.uuid4().hex
-            result = {"schema_version": "1.0", "mode": "paper", "runtime": "observation_only",
+            result = {"schema_version": "1.0", "mode": "paper",
+                "runtime": "serve_paper" if self.stock_execution else "observation_only",
                 "instance_id": self.instance_id, "cycle_id": cycle_id, "started_at": started.isoformat(),
                 "provenance": "provider_observations", "orders_submitted": 0, "execution_enabled": False,
                 "broker": {"verified": False, "checked_at": None},
                 "data_feed": {"verified": False, "feed": self.config.data_feed, "as_of": None, "received_at": None},
                 "market_watch": None, "price_history": None,
                 "accounting": {"complete": False, "realized_pnl": None, "fees": None},
-                "session": None, "blockers": ["observation_runtime_cannot_execute_orders"],
+                "session": None,
+                "blockers": [] if self.stock_execution else ["observation_runtime_cannot_execute_orders"],
                 "acknowledged_commands": [], "error_code": None}
             stage = "command_dispatch"
             try:
@@ -436,10 +505,45 @@ class ObservationWorker:
                 result["accounting_import"] = receipt
                 result["blockers"].extend(ledger.get("blockers", []))
                 stage = "session_evaluation"
-                # Unconditional False plus the read-only provider/transport are
-                # independent boundaries. No config value can arm this runtime.
-                session = self.session.cycle(snapshots=snapshots, session_ledger=ledger, execute=False)
+                # serve-observe stays execute=False. The read-only provider is a
+                # second boundary. No config value can arm that command.
+                # serve-paper uses the same session and may execute only when
+                # the shared paper gates are open.
+                execute = False
+                session_ledger = ledger
+                if self.stock_execution:
+                    from .paper_runtime import evaluate_paper_gates, ledger_ready, production_session_ledger
+                    reason, active = evaluate_paper_gates(
+                        self.config, self.provider, self.journal,
+                        broker_url=self.broker_url, broker_url_error=self.broker_url_error)
+                    execute = bool(active)
+                    if active:
+                        candidate = ledger if ledger_ready(ledger) else None
+                        if candidate is None and self._session_ledger_factory is not None:
+                            candidate = self._session_ledger_factory()
+                        if candidate is None or not ledger_ready(candidate):
+                            produced = production_session_ledger(self.config, self.provider, self.clock)
+                            if ledger_ready(produced):
+                                candidate = produced
+                        if not ledger_ready(candidate):
+                            reason, active, execute = "session_ledger_incomplete", False, False
+                        else:
+                            session_ledger = candidate
+                    self.execution_reason = reason
+                    self.paper_execution_active = bool(active and execute)
+                session = self.session.cycle(snapshots=snapshots, session_ledger=session_ledger, execute=execute)
                 result["session"] = session
+                if self.stock_execution:
+                    if execute and session.get("execute_requested") is not True:
+                        self.execution_reason = "paper_cycle_failed"
+                        self.paper_execution_active = False
+                    self.orders_submitted = self._acknowledged_stock_orders()
+                    result["execution_enabled"] = bool(self.paper_execution_active)
+                    result["orders_submitted"] = self.orders_submitted
+                    result["execution_reason"] = self.execution_reason
+                    result["paper_execution_active"] = bool(self.paper_execution_active)
+                    if not self.paper_execution_active and self.execution_reason:
+                        result["blockers"].append(self.execution_reason)
                 result["blockers"].extend(session.get("errors", []))
                 if session.get("broker_account_id") not in {None, account_id}:
                     result["broker"] = {"verified": False, "checked_at": None}
@@ -458,6 +562,11 @@ class ObservationWorker:
             except (RuntimeError, ValueError, TypeError, KeyError, OSError, ArithmeticError):
                 result["error_code"] = stage + "_failed"
                 result["blockers"].append(result["error_code"])
+                if self.stock_execution:
+                    self.paper_execution_active = False
+                    self.execution_reason = result["error_code"]
+                    result["execution_reason"] = self.execution_reason
+                    result["paper_execution_active"] = False
                 if stage == "paper_account_check":
                     result["broker"] = {"verified": False, "checked_at": None}
                 if stage == "command_dispatch":
@@ -478,8 +587,9 @@ class ObservationWorker:
                 result["crypto_watch"] = self._crypto_state(result["crypto_watch"], now=self.clock())
             if "forex_watch" in result:
                 result["forex_watch"] = self._forex_state(result["forex_watch"], now=self.clock())
-            # Equity observation stays execute=False. Crypto orders are a separate
-            # step and only run when CRYPTO_PAPER_EXECUTION_ENABLED is true.
+            # One crypto pass per cycle, on this journal. The standalone
+            # crypto_paper_loop timer is not started. Stock orders, when
+            # serve-paper armed them, already used the same kill latch.
             crypto_paper = self._maybe_crypto_paper(
                 result.get("crypto_watch") if "crypto_watch" in result else None)
             if crypto_paper is not None:
@@ -556,7 +666,36 @@ class ObservationWorker:
                     and latest["session"].get("reconciled")
                     and _fresh(latest["session"].get("broker_checked_at"), now, 5)
                     and _fresh(latest["accounting"].get("as_of"), now, 5)),
-                "paper_execution_running": False, "latest_cycle": latest}
+                "paper_execution_running": bool(self.stock_execution and self.execution_status()["paper_execution_active"]),
+                "latest_cycle": latest}
+
+    def _acknowledged_stock_orders(self):
+        try:
+            return len(self.journal.events(event_type="paper_order_acknowledged"))
+        except Exception:
+            return self.orders_submitted
+
+    def execution_status(self):
+        """Health fields. serve-observe stays inactive even if the flag env is true."""
+        if not self.stock_execution:
+            return {
+                "paper_trading_enabled": bool(self.config.paper_enabled),
+                "paper_execution_active": False,
+                "execution_reason": "observation_runtime_cannot_execute_orders",
+                "live_execution_supported": False,
+                "live_execution_locked": True,
+                "orders_submitted": 0,
+            }
+        orders = self._acknowledged_stock_orders()
+        self.orders_submitted = orders
+        return {
+            "paper_trading_enabled": bool(self.config.paper_enabled),
+            "paper_execution_active": bool(self._active and self.paper_execution_active and not self.stop_event.is_set()),
+            "execution_reason": self.execution_reason,
+            "live_execution_supported": False,
+            "live_execution_locked": True,
+            "orders_submitted": orders,
+        }
 
     def run(self, *, max_cycles=None, elapsed_clock=time.monotonic):
         if not self._active:

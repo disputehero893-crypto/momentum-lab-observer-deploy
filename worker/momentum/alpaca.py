@@ -15,6 +15,49 @@ from .presets import APPROVED_PAPER_PROFILES
 class PaperDisabled(RuntimeError):
     pass
 
+
+def assert_paper_broker_url(url):
+    """Accept only Alpaca's paper trading origin. Live and every other host are refused.
+
+    There is no setting that selects a live trading URL. ``PAPER_API_HOST`` is the
+    only trading origin this process can call.
+    """
+    if type(url) is not str:
+        raise PaperDisabled("broker_url_not_paper_endpoint")
+    normalized = url.strip().rstrip("/")
+    parsed = urlsplit(normalized)
+    host = (parsed.hostname or "").lower()
+    if host == "api.alpaca.markets" or normalized.startswith("https://api.alpaca.markets"):
+        raise PaperDisabled("live_broker_url_refused")
+    if (parsed.scheme != "https" or host != "paper-api.alpaca.markets"
+            or parsed.port not in (None, 443) or parsed.path not in ("", "/")
+            or parsed.query or parsed.fragment or parsed.username or parsed.password
+            or normalized != PAPER_API_HOST):
+        raise PaperDisabled("broker_url_not_paper_endpoint")
+    return PAPER_API_HOST
+
+
+def fill_report(order):
+    """Copy broker fill fields without turning a missing amount into zero."""
+    if not isinstance(order, dict):
+        return {"filled_qty": None, "filled_avg_price": None}
+
+    def amount(key):
+        if key not in order:
+            return None
+        value = order.get(key)
+        if value is None or value == "":
+            return None
+        try:
+            number = Decimal(str(value))
+        except (ValueError, TypeError, ArithmeticError):
+            return None
+        if not number.is_finite():
+            return None
+        return format(number, "f")
+
+    return {"filled_qty": amount("filled_qty"), "filled_avg_price": amount("filled_avg_price")}
+
 class BrokerError(RuntimeError):
     def __init__(self, message, status=None):
         super().__init__(message)
@@ -121,12 +164,23 @@ class PaperClient:
             except (TypeError, ValueError, OverflowError):
                 raise BrokerError("Invalid account activities query") from None
             params = checked
-        host = DATA_API_HOST if data else PAPER_API_HOST
+        if data:
+            host = DATA_API_HOST
+        else:
+            host = PAPER_API_HOST
+            # https trading origins must be exactly the paper endpoint. A non-https
+            # tamper still falls through to the host lock below.
+            if urlsplit(str(host)).scheme == "https":
+                host = assert_paper_broker_url(host)
+        if method == "PATCH" and (data or not re.fullmatch(r"/v2/orders/[A-Za-z0-9-]{1,80}", path)):
+            raise BrokerError("Only a paper order replace may use PATCH")
         url = host + path + ("?" + urlencode(params) if params else "")
         parsed = urlsplit(url)
         if parsed.scheme != "https" or parsed.netloc != urlsplit(host).netloc:
             raise BrokerError("API host lock rejected request")
-        if method not in ({"GET"} if data else {"GET", "POST", "DELETE"}):
+        if not data and parsed.hostname != "paper-api.alpaca.markets":
+            raise PaperDisabled("live_broker_url_refused")
+        if method not in ({"GET"} if data else {"GET", "POST", "DELETE", "PATCH"}):
             raise BrokerError("Unsupported paper API method")
         headers = {"APCA-API-KEY-ID": self.config.api_key,
                    "APCA-API-SECRET-KEY": self.config.api_secret,
@@ -373,4 +427,83 @@ class PaperClient:
             journal.append(run_id, "paper_cancel_unconfirmed", {"order_id": order_id, "http_status": exc.status},
                            key=f"cancel-unconfirmed:{order_id}:{attempt}")
             raise
+
+    def replace(self, order, journal, run_id, *, limit_price=None, qty=None, guard=None):
+        """Replace a journaled paper order. The attempt is durable before the PATCH.
+
+        A missing fill quantity or average price on the result stays unknown.
+        It is not stored as zero. Live origins are refused before any request.
+        """
+        self._enabled()
+        assert_paper_broker_url(PAPER_API_HOST)
+        blockers = self.config.paper_blockers()
+        if blockers:
+            raise PaperDisabled("Paper execution is blocked: " + ", ".join(blockers))
+        def check_guard():
+            if guard is not None and guard() is not True:
+                raise PaperDisabled("Replacement service is stopping or no longer owns execution")
+        check_guard()
+        order_id = str(order.get("id", ""))
+        client_id = str(order.get("client_order_id", ""))
+        if not client_id.startswith("mlab_") or not re.fullmatch(r"[A-Za-z0-9-]{1,80}", order_id):
+            raise PaperDisabled("Only this worker's known paper orders may be replaced")
+        if not journal.event_by_key("paper-request:" + client_id):
+            raise PaperDisabled("Cannot replace an order absent from the durable request journal")
+        changes = {}
+        if qty is not None:
+            quantity = Decimal(str(qty))
+            if not quantity.is_finite() or quantity <= 0 or quantity != quantity.to_integral_value():
+                raise ValueError("Replacement qty must be a positive whole-share amount")
+            changes["qty"] = str(int(quantity))
+        if limit_price is not None:
+            price = Decimal(str(limit_price))
+            if not price.is_finite() or price <= 0:
+                raise ValueError("Replacement limit price must be positive and finite")
+            increment = Decimal("0.01") if price >= 1 else Decimal("0.0001")
+            if price != price.quantize(increment):
+                raise ValueError("Limit price violates Alpaca equity tick precision")
+            changes["limit_price"] = decimal_string(price)
+        if not changes:
+            raise ValueError("A paper replace needs a new quantity or limit price")
+        changes["time_in_force"] = "day"
+        fresh = self.order_by_client_id(client_id)
+        check_guard()
+        if fresh is None or str(fresh.get("id")) != order_id:
+            raise BrokerError("Order identity could not be reconciled before replacement")
+        if fresh.get("status") in {"filled", "canceled", "expired", "rejected", "replaced"}:
+            journal.append(run_id, "paper_replace_resolved",
+                           {"order": fresh, "fill": fill_report(fresh)},
+                           key=f"replace-resolved:{run_id}:{order_id}:{fresh.get('status')}")
+            return fresh
+        previous = [e for e in journal.events(event_type="paper_replace_requested")
+                    if e["payload"]["order_id"] == order_id]
+        if len(previous) >= 3:
+            raise BrokerError("Replacement retry limit reached; operator reconciliation required")
+        attempt = len(previous) + 1
+        key = f"replace-request:{order_id}:{attempt}"
+        journal.append(run_id, "paper_replace_requested",
+                       {"order_id": order_id, "client_order_id": client_id, "attempt": attempt,
+                        "request": changes, "fill": fill_report(fresh)},
+                       key=key, timestamp=self.clock().isoformat())
+        try:
+            check_guard()
+        except Exception:
+            journal.append(run_id, "paper_replace_not_sent",
+                           {"order_id": order_id, "client_order_id": client_id, "attempt": attempt,
+                            "reason": "execution_gate_changed"},
+                           key=f"replace-not-sent:{order_id}:{attempt}")
+            raise
+        try:
+            replaced = self._request("PATCH", "/v2/orders/" + order_id, payload=changes)
+        except BrokerError as exc:
+            journal.append(run_id, "paper_replace_unconfirmed",
+                           {"order_id": order_id, "http_status": exc.status, "fill": fill_report(None)},
+                           key=f"replace-unconfirmed:{order_id}:{attempt}")
+            raise
+        report = fill_report(replaced if isinstance(replaced, dict) else None)
+        journal.append(run_id, "paper_replace_acknowledged",
+                       {"order_id": order_id, "client_order_id": client_id, "attempt": attempt,
+                        "order": replaced, "fill": report},
+                       key=f"replace-ack:{order_id}:{attempt}")
+        return replaced
 
