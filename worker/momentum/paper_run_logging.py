@@ -40,7 +40,16 @@ EVENT_KINDS = frozenset({
     "blocker",
     "paper_order",
     "session_ended",
+    # Live-feed trade events (paper only). These describe decisions and paper
+    # orders another component already made; this module never submits.
+    "signal",
+    "entry",
+    "exit",
+    "stop",
+    "skip",
 })
+
+TRADE_EVENT_KINDS = frozenset({"signal", "entry", "exit", "stop", "skip"})
 
 BLOCKER_KINDS = frozenset({
     "off_universe_symbol",
@@ -211,6 +220,9 @@ class DisabledPaperRunLogger:
         return False
 
     def log_paper_order(self, **kwargs):
+        return False
+
+    def log_trade_event(self, **kwargs):
         return False
 
     def close_run(self, **kwargs):
@@ -517,6 +529,16 @@ class PaperRunLogger:
         }
         key = event_key or ("paper-order:" + self.run_key + ":" + str(client_order_id))
         return self.append_event(event_key=key, kind="paper_order", payload=payload, occurred_at=occurred_at)
+
+    def log_trade_event(self, kind, *, payload, event_key, occurred_at=None):
+        """Record a signal/entry/exit/stop/skip that already happened. Never submits."""
+        self._require_run()
+        if kind not in TRADE_EVENT_KINDS:
+            raise ValueError("Unsupported trade event kind")
+        safe = dict(payload or {})
+        safe["mode"] = "paper"
+        safe["placed_by_logger"] = False
+        return self.append_event(event_key=event_key[:200], kind=kind, payload=safe, occurred_at=occurred_at)
 
     def close_run(self, *, status="completed", summary=None, completed_at=None):
         if self.run_id is None:

@@ -48,6 +48,7 @@ class CryptoPaperLoop:
         self.history = {pair: [] for pair in CRYPTO_PAPER_PAIRS}
         self.positions = {}
         self.realized = Decimal("0")
+        self.last_fill = None
         self._load_book()
 
     def _load_book(self):
@@ -167,11 +168,32 @@ class CryptoPaperLoop:
             entry = quote["ask"]
             self.positions[quote["pair"]] = {"qty": qty, "entry": entry}
             self._record_position(quote["pair"], qty, entry, order["client_order_id"])
+            self.last_fill = {
+                "side": "buy", "qty": _money(qty), "price": _money(entry),
+                "stop_price": order.get("stop_price"), "client_order_id": order["client_order_id"],
+            }
         else:
             held = self.positions.pop(quote["pair"])
-            self.realized += (quote["bid"] - held["entry"]) * held["qty"]
+            pnl = (quote["bid"] - held["entry"]) * held["qty"]
+            self.realized += pnl
             self._record_position(quote["pair"], Decimal("0"), Decimal("0"), order["client_order_id"])
+            self.last_fill = {
+                "side": "sell", "qty": _money(held["qty"]), "price": _money(quote["bid"]),
+                "entry_price": _money(held["entry"]), "pnl": _money(pnl),
+                "client_order_id": order["client_order_id"],
+            }
         return result
+
+    def _context(self, quote):
+        """Display-only quote and recent-window detail for the live feed. Never used to decide."""
+        try:
+            window = [{"t": stamp, "mid": _money(mid)} for stamp, mid in self.history.get(quote["pair"], [])]
+            return {
+                "bid": _money(quote["bid"]), "ask": _money(quote["ask"]), "mid": _money(quote["mid"]),
+                "quote_at": quote["source_at"].isoformat(), "window": window,
+            }
+        except Exception:
+            return {}
 
     def cycle(self, watch):
         """One pass over a crypto watch. Flag off performs no order work."""
@@ -229,15 +251,19 @@ class CryptoPaperLoop:
                 realized_pnl=self.realized,
             )
             if decision["action"] != "sell":
-                decisions.append({"pair": quote["pair"], "action": "hold", "reason": decision["reason"]})
+                decisions.append({"pair": quote["pair"], "action": "hold", "reason": decision["reason"],
+                                  "rule": decision.get("rule"), **self._context(quote)})
                 continue
             try:
                 self._submit(decision, quote, limits)
             except CryptoPaperError as exc:
-                decisions.append({"pair": quote["pair"], "action": "hold", "reason": str(exc)})
+                decisions.append({"pair": quote["pair"], "action": "hold", "reason": str(exc),
+                                  "intent": "sell", "signal_reason": decision["reason"],
+                                  "rule": decision.get("rule"), **self._context(quote)})
                 acted = True
                 continue
-            decisions.append({"pair": quote["pair"], "action": "sell", "reason": decision["reason"]})
+            decisions.append({"pair": quote["pair"], "action": "sell", "reason": decision["reason"],
+                              "rule": decision.get("rule"), **self._context(quote), **(self.last_fill or {})})
             orders += 1
             acted = True
 
@@ -251,14 +277,18 @@ class CryptoPaperLoop:
                     open_positions=len(self.positions), realized_pnl=self.realized,
                 )
                 if decision["action"] != "buy":
-                    decisions.append({"pair": quote["pair"], "action": "hold", "reason": decision["reason"]})
+                    decisions.append({"pair": quote["pair"], "action": "hold", "reason": decision["reason"],
+                                      "rule": decision.get("rule"), **self._context(quote)})
                     continue
                 try:
                     self._submit(decision, quote, limits)
                 except CryptoPaperError as exc:
-                    decisions.append({"pair": quote["pair"], "action": "hold", "reason": str(exc)})
+                    decisions.append({"pair": quote["pair"], "action": "hold", "reason": str(exc),
+                                      "intent": "buy", "signal_reason": decision["reason"],
+                                      "rule": decision.get("rule"), **self._context(quote)})
                     break
-                decisions.append({"pair": quote["pair"], "action": "buy", "reason": decision["reason"]})
+                decisions.append({"pair": quote["pair"], "action": "buy", "reason": decision["reason"],
+                                  "rule": decision.get("rule"), **self._context(quote), **(self.last_fill or {})})
                 orders += 1
                 break
 
